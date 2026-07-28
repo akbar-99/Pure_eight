@@ -23,5 +23,10 @@
   },
   "dependencies": {
     "react-native-worklets": "^0.9.1"
+  },
+  "//optionalDependencies": "npm prunes non-matching platform binaries from the lockfile (npm/cli#4828), so a lockfile generated on macOS ships no Linux bindings and CI cannot build. lightningcss is hoisted to the root node_modules, so its binding must be declared here rather than in apps/web. os/cpu constraints mean these only install on Linux.",
+  "optionalDependencies": {
+    "lightningcss-linux-x64-gnu": "1.32.0",
+    "lightningcss-linux-x64-musl": "1.32.0"
   }
 }

@@ -7,6 +7,11 @@ import Link from 'next/link'
 
 const NAV_CARDS = [
   {
+    href: '/dashboard/settings/users',
+    label: 'Users & Access',
+    desc: 'Logins, roles & password resets',
+  },
+  {
     href: '/dashboard/settings/services',
     label: 'Services',
     desc: 'Manage service catalogue',

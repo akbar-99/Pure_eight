@@ -32,8 +32,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && request.nextUrl.pathname.startsWith('/auth')) {
+  // Redirect authenticated users away from auth pages. /auth/callback is exempt:
+  // it exchanges the code from admin-issued invite and password-reset links, and
+  // must still run when the visitor already has a session.
+  if (
+    user &&
+    request.nextUrl.pathname.startsWith('/auth') &&
+    !request.nextUrl.pathname.startsWith('/auth/callback')
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard/overview'
     return NextResponse.redirect(url)

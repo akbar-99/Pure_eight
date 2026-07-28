@@ -1,7 +1,3 @@
-"use client"
-
-import React, { useState } from 'react'
-
 interface PureEightLogoProps {
   /** Rendered width in px. Height is auto-calculated at ~1:4.7 ratio. */
   width?: number
@@ -17,49 +13,6 @@ interface PureEightLogoProps {
 export function PureEightLogo({ width = 200, color = 'dark', className }: PureEightLogoProps) {
   const fill = color === 'light' ? '#FFFFFF' : '#1A1A1A'
   const h = Math.round(width / 4.5)
-
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
-
-  React.useEffect(() => {
-    // Try PNG first, then SVG. Use fetch HEAD to avoid downloading content in dev.
-    let mounted = true
-
-    async function check() {
-      try {
-        const pngResp = await fetch('/pure8-logo.png', { method: 'HEAD' })
-        if (mounted && pngResp.ok) {
-          setImageUrl('/pure8-logo.png')
-          return
-        }
-      } catch {}
-
-      try {
-        const svgResp = await fetch('/pure8-logo.svg', { method: 'HEAD' })
-        if (mounted && svgResp.ok) {
-          setImageUrl('/pure8-logo.svg')
-          return
-        }
-      } catch {}
-
-      if (mounted) setImageUrl(null)
-    }
-
-    check()
-    return () => { mounted = false }
-  }, [])
-
-  if (imageUrl) {
-    return (
-      <img
-        src={imageUrl}
-        alt="Pure Eight Unisex Salon"
-        width={width}
-        height={h}
-        className={className}
-        style={{ display: 'block', width, height: h }}
-      />
-    )
-  }
 
   return (
     <svg

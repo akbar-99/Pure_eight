@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
@@ -23,8 +23,38 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pure Eight — Franchise Management",
+  // Absolute URLs for social/link-preview tags. Set NEXT_PUBLIC_SITE_URL in
+  // production so previews don't resolve against localhost.
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  ),
+  title: {
+    default: "Pure Eight — Franchise Management",
+    // Child routes set only their own title; the brand is appended here.
+    template: "%s · Pure Eight",
+  },
   description: "Premium business management platform for franchise networks",
+  applicationName: "Pure Eight",
+  // Icons themselves come from the app/icon.svg and app/apple-icon.tsx
+  // file conventions — Next injects the <link> tags automatically.
+  appleWebApp: {
+    title: "Pure Eight",
+    statusBarStyle: "black-translucent",
+  },
+  openGraph: {
+    title: "Pure Eight — Franchise Management",
+    description: "Premium business management platform for franchise networks",
+    siteName: "Pure Eight",
+    type: "website",
+  },
+};
+
+// Colours the browser UI (mobile address bar) to match the monochrome brand.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 };
 
 export default function RootLayout({

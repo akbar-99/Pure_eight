@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Pure Eight">
+  <style>
+    .bg { fill: #000000; }
+    .fg { stroke: #FFFFFF; }
+    /* Browsers render SVG favicons against their own chrome — invert on dark
+       so the mark keeps contrast in both light and dark browser themes. */
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #FFFFFF; }
+      .fg { stroke: #000000; }
+    }
+  </style>
+  <rect class="bg" width="32" height="32" rx="7" />
+  <!-- Figure-8 drawn as two stacked rings: no text, so no font dependency at 16px -->
+  <g class="fg" fill="none" stroke-width="2.1">
+    <circle cx="16" cy="12" r="4.3" />
+    <circle cx="16" cy="21.2" r="5.4" />
+  </g>
+</svg>

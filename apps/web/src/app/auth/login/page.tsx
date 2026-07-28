@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PureEightLogo } from '@/components/ui/pure-eight-logo'
 import { Lock, Mail, AlertCircle } from 'lucide-react'
-import Link from 'next/link'
 
 export default function LoginPage({
   searchParams,
@@ -58,24 +57,15 @@ async function LoginForm({ searchParams }: { searchParams: Promise<{ error?: str
               autoComplete="current-password"
               required
             />
-            <div className="flex justify-end">
-              <Link
-                href="/auth/forgot-password"
-                className="text-xs text-grey hover:text-charcoal transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
             <Button type="submit" className="w-full" size="lg">
               Sign in
             </Button>
           </form>
 
+          {/* Accounts and password resets are handled by an administrator —
+              there is deliberately no self-serve sign-up or reset here. */}
           <p className="text-center text-xs text-grey mt-6">
-            No account?{' '}
-            <Link href="/auth/signup" className="text-charcoal font-medium hover:text-black transition-colors">
-              Create one
-            </Link>
+            Need access or a password reset? Contact your administrator.
           </p>
         </div>
 

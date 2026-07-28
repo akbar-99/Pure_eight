@@ -1,7 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+# Unanchored so workspace installs (apps/*/node_modules) are covered too.
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -14,8 +15,15 @@
 /coverage
 
 # next.js
-/.next/
-/out/
+# Unanchored so these match in workspace apps too (apps/web/.next), not just the repo root.
+.next/
+out/
+
+# turborepo
+.turbo/
+
+# expo — local build state, device ids and logs
+.expo/
 
 # production
 /build

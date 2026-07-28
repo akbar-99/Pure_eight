@@ -1,0 +1,69 @@
+{
+  "expo": {
+    "name": "Pure Eight Staff",
+    "slug": "pure-eight-staff",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "pure-eight-staff",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pureeight.staff",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used for customer photos, audit evidence, and attendance selfies.",
+        "NSFaceIDUsageDescription": "Face ID unlocks the app quickly and securely.",
+        "NSLocationWhenInUseUsageDescription": "Location is used for geo-fenced attendance clock-in."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.pureeight.staff",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#000000"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Pure Eight Staff to access your camera."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Pure Eight Staff to use Face ID."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {}
+  }
+}

@@ -11,18 +11,20 @@ import { BookingSettingsPanel } from './booking-settings-panel'
 
 export const dynamic = 'force-dynamic'
 
-async function getOnlineBookings(outletId: string) {
+async function getOnlineBookings(outletId: string | null) {
   const supabase = createAdminClient()
   const now = new Date().toISOString()
-  const { data } = await supabase
+  let query = supabase
     .from('appointments')
     .select('id,starts_at,ends_at,status,customers(full_name,mobile),appointment_items(services(name),staff(full_name))')
-    .eq('outlet_id', outletId)
     .gte('starts_at', now)
     .is('deleted_at', null)
     .in('status', ['pending', 'confirmed'])
     .order('starts_at')
     .limit(20)
+  // HQ users have no outlet — show the whole network rather than filtering by ''.
+  if (outletId) query = query.eq('outlet_id', outletId)
+  const { data } = await query
   return data ?? []
 }
 

@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 
 async function fetchStaff(ctx: {
   isHqUser: boolean
-  outletId: string
+  outletId: string | null
   tenantId: string
 }): Promise<StaffRow[]> {
   const admin = createAdminClient()
@@ -34,7 +34,7 @@ async function fetchStaff(ctx: {
   return (data ?? []) as StaffRow[]
 }
 
-async function fetchOutletName(outletId: string): Promise<string> {
+async function fetchOutletName(outletId: string | null): Promise<string> {
   if (!outletId) return 'HQ'
   const admin = createAdminClient()
   const { data } = await admin

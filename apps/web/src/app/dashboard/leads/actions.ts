@@ -110,6 +110,8 @@ export async function addLead(input: {
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
   const { outletId } = ctx
+  // leads.outlet_id is NOT NULL, and HQ users carry no outlet.
+  if (!outletId) return { error: 'Select an outlet before creating a lead.' }
 
   const supabase = createAdminClient()
   const payload: LeadInsert = {
@@ -139,12 +141,14 @@ export async function getStaffList(): Promise<Array<{ id: string; full_name: str
   const { outletId } = ctx
 
   const supabase = createAdminClient()
-  const { data } = await supabase
+  let staffQuery = supabase
     .from('staff')
     .select('id,full_name')
-    .eq('outlet_id', outletId)
     .eq('status', 'active')
     .is('deleted_at', null)
     .order('full_name')
+  // HQ users have no outlet — list the whole network rather than filtering by ''.
+  if (outletId) staffQuery = staffQuery.eq('outlet_id', outletId)
+  const { data } = await staffQuery
   return data ?? []
 }

@@ -8,14 +8,16 @@ import { getStaffList } from "./actions";
 import { getServerContext } from "@/lib/context/server";
 import { redirect } from "next/navigation";
 
-async function getLeads(outletId: string) {
+async function getLeads(outletId: string | null) {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  let query = supabase
     .from("leads")
     .select("id,full_name,mobile,source,expected_service,status,follow_up_at,staff:assigned_staff_id(id,full_name)")
-    .eq("outlet_id", outletId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
+  // HQ users have no outlet — show the whole network rather than filtering by ''.
+  if (outletId) query = query.eq("outlet_id", outletId);
+  const { data } = await query;
 
   return (data ?? []).map(lead => ({
     ...lead,

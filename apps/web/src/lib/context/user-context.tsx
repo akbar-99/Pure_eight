@@ -5,7 +5,8 @@ import { createContext, useContext } from 'react'
 export type UserContextValue = {
   userId: string
   tenantId: string
-  outletId: string
+  /** null for HQ users — mirrors ServerContext. Never '', which is invalid uuid input. */
+  outletId: string | null
   role: string
   isHqUser: boolean
   outletName: string

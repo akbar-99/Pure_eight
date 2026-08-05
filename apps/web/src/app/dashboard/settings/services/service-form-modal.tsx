@@ -166,7 +166,9 @@ export function ServiceFormModal({
                   label="Duration"
                   type="number"
                   min="1"
-                  step="5"
+                  // step=5 rejected any duration not on a 1,6,11… boundary, so
+                  // ordinary values like 40 failed browser validation.
+                  step="1"
                   placeholder="45"
                   required
                   value={durationMins}

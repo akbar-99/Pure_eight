@@ -42,6 +42,8 @@ export async function getBookingSettings(): Promise<BookingSettings> {
   const ctx = await getServerContext()
   if (!ctx) throw new Error('Not authenticated')
   const { tenantId, outletId } = ctx
+  // Booking settings are stored per outlet; HQ users aren't scoped to one.
+  if (!outletId) return DEFAULT_BOOKING_SETTINGS
   const admin = createAdminClient()
 
   const { data } = await admin
@@ -63,6 +65,7 @@ export async function saveBookingSettings(
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
   const { tenantId, outletId } = ctx
+  if (!outletId) return { error: 'Select an outlet before saving booking settings.' }
   const admin = createAdminClient()
 
   const { data: tenant } = await admin
@@ -89,7 +92,7 @@ export async function saveBookingSettings(
 
 export async function getOutletInfo(): Promise<{ name: string; id: string }> {
   const ctx = await getServerContext()
-  if (!ctx) return { name: 'outlet', id: '' }
+  if (!ctx?.outletId) return { name: 'outlet', id: '' }
   const admin = createAdminClient()
 
   const { data } = await admin

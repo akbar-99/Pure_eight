@@ -6,11 +6,27 @@ import { X } from 'lucide-react'
 import { addCustomer } from './actions'
 
 interface AddCustomerModalProps {
-  trigger: ReactNode
+  /** Omit in controlled mode — the parent renders its own opener. */
+  trigger?: ReactNode
+  /** Controlled mode: when provided, the parent owns the open state. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function AddCustomerModal({ trigger }: AddCustomerModalProps) {
-  const [open, setOpen] = useState(false)
+export function AddCustomerModal({
+  trigger,
+  open: openProp,
+  onOpenChange,
+}: AddCustomerModalProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const isControlled = openProp !== undefined
+  const open = isControlled ? openProp : uncontrolledOpen
+
+  function setOpen(next: boolean) {
+    if (!isControlled) setUncontrolledOpen(next)
+    onOpenChange?.(next)
+  }
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,8 +46,15 @@ export function AddCustomerModal({ trigger }: AddCustomerModalProps) {
   }
 
   function handleOpen() {
-    reset()
     setOpen(true)
+  }
+
+  // Clear the form whenever it opens, in either mode. Done during render rather
+  // than in an effect so the fields are never briefly stale.
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) reset()
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -56,7 +79,7 @@ export function AddCustomerModal({ trigger }: AddCustomerModalProps) {
 
   return (
     <>
-      <span onClick={handleOpen}>{trigger}</span>
+      {trigger && <span onClick={handleOpen}>{trigger}</span>}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

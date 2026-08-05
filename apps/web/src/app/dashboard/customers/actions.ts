@@ -19,7 +19,9 @@ export async function addCustomer(input: {
     .from('customers')
     .insert({
       brand_id: tenantId,
-      last_visited_outlet_id: outletId,
+      // HQ users have no outlet, so ctx.outletId is '' — an empty string is not
+      // valid uuid input. The column is nullable, so store null instead.
+      last_visited_outlet_id: outletId || null,
       full_name: input.full_name,
       mobile: input.mobile,
       email: input.email || null,

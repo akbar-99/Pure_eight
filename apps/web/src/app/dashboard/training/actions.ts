@@ -51,23 +51,32 @@ export async function getTrainingPageData(): Promise<TrainingPageData> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any
 
-  const [coursesRes, assignmentsRes, staffRes] = await Promise.all([
+  const [coursesRes, staffRes] = await Promise.all([
     db.from('training_courses')
       .select('*')
       .eq('brand_id', tenantId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
-    db.from('training_assignments')
-      .select('*, training_courses(title), staff(full_name)')
-      .eq('outlet_id', outletId ?? '')
-      .order('assigned_at', { ascending: false })
-      .limit(50),
-    admin.from('staff')
-      .select('id, full_name')
-      .eq('outlet_id', outletId ?? '')
+    // HQ users have no outlet, so they see staff across the whole network.
+    (outletId
+      ? admin.from('staff').select('id, full_name').eq('outlet_id', outletId)
+      : admin.from('staff').select('id, full_name')
+    )
       .is('deleted_at', null)
       .order('full_name'),
   ])
+
+  // training_assignments has no outlet_id column — it is scoped through staff_id,
+  // so restrict to the staff we just resolved. Ordering uses created_at, since
+  // assigned_at does not exist either.
+  const staffIds = ((staffRes.data ?? []) as Array<{ id: string }>).map(s => s.id)
+  const assignmentsRes = staffIds.length
+    ? await db.from('training_assignments')
+        .select('*, training_courses(title), staff(full_name)')
+        .in('staff_id', staffIds)
+        .order('created_at', { ascending: false })
+        .limit(50)
+    : { data: [] }
 
   const rawCourses = (coursesRes.data ?? []) as Array<Record<string, unknown>>
   const rawAssignments = (assignmentsRes.data ?? []) as Array<Record<string, unknown>>
@@ -114,7 +123,7 @@ export async function getTrainingPageData(): Promise<TrainingPageData> {
     status: (a.status as TrainingAssignment['status']) ?? 'assigned',
     progress_pct: (a.progress_pct as number) ?? 0,
     due_date: a.due_date as string | null,
-    assigned_at: a.assigned_at as string,
+    assigned_at: a.created_at as string,
     completed_at: a.completed_at as string | null,
   }))
 
@@ -160,14 +169,16 @@ export async function assignCourse(
   if (!ctx) return { error: 'Not authenticated' }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = createAdminClient() as any
+  // training_assignments has neither an outlet_id nor an assigned_at column —
+  // writing them failed with "column does not exist". The row is scoped through
+  // staff_id, and created_at is populated by the database default.
   const rows = staffIds.map(staffId => ({
     course_id: courseId,
     staff_id: staffId,
-    outlet_id: ctx.outletId,
+    assigned_by: ctx.userId,
     status: 'assigned',
     progress_pct: 0,
     due_date: dueDate ?? null,
-    assigned_at: new Date().toISOString(),
   }))
   const { error } = await admin.from('training_assignments')
     .upsert(rows, { onConflict: 'course_id,staff_id' })

@@ -30,8 +30,12 @@ export async function getAuditPageData(): Promise<AuditPageData> {
 
   const [tmplRes, subRes] = await Promise.all([
     admin.from('audit_templates').select('*').eq('brand_id', tenantId).is('deleted_at', null).order('created_at', { ascending: false }),
-    admin.from('audit_submissions').select('*, audit_templates(name)')
-      .eq('outlet_id', outletId ?? '').order('created_at', { ascending: false }).limit(20),
+    // `outletId ?? ''` used to send an empty string here, which Postgres rejects
+    // as invalid uuid input. HQ users have no outlet, so show the whole network.
+    (outletId
+      ? admin.from('audit_submissions').select('*, audit_templates(name)').eq('outlet_id', outletId)
+      : admin.from('audit_submissions').select('*, audit_templates(name)')
+    ).order('created_at', { ascending: false }).limit(20),
   ])
 
   const templates = (tmplRes.data ?? []) as AuditTemplate[]

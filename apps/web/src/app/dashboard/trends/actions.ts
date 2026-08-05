@@ -207,7 +207,7 @@ export async function fetchTrendData(
         .gte('created_at', start).lte('created_at', end)
         .is('deleted_at', null)
     )
-    const staffNamesRes = await (isHq
+    const staffNamesRes = await (isHq || !outletId
       ? admin.from('staff').select('id, full_name').is('deleted_at', null)
       : admin.from('staff').select('id, full_name').eq('outlet_id', outletId).is('deleted_at', null)
     )

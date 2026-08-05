@@ -8,7 +8,11 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   staff: Array<{ id: string; full_name: string }>
-  trigger: ReactNode
+  /** Omit in controlled mode — the parent renders its own opener. */
+  trigger?: ReactNode
+  /** Controlled mode: when provided, the parent owns the open state. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 const SOURCE_OPTIONS = [
@@ -28,8 +32,16 @@ const selectCls = cn(
 
 const labelCls = 'text-sm font-medium text-charcoal'
 
-export function AddLeadModal({ staff, trigger }: Props) {
-  const [open, setOpen] = useState(false)
+export function AddLeadModal({ staff, trigger, open: openProp, onOpenChange }: Props) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const isControlled = openProp !== undefined
+  const open = isControlled ? openProp : uncontrolledOpen
+
+  function setOpen(next: boolean) {
+    if (!isControlled) setUncontrolledOpen(next)
+    onOpenChange?.(next)
+  }
+
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -50,17 +62,26 @@ export function AddLeadModal({ staff, trigger }: Props) {
   }
 
   function handleOpen() {
-    setForm({
-      full_name: '',
-      mobile: '',
-      source: '',
-      expected_service: '',
-      assigned_staff_id: '',
-      follow_up_at: '',
-      notes: '',
-    })
-    setError(null)
     setOpen(true)
+  }
+
+  // Clear the form whenever it opens, in either mode. Done during render rather
+  // than in an effect so the fields are never briefly stale.
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) {
+      setForm({
+        full_name: '',
+        mobile: '',
+        source: '',
+        expected_service: '',
+        assigned_staff_id: '',
+        follow_up_at: '',
+        notes: '',
+      })
+      setError(null)
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -86,7 +107,7 @@ export function AddLeadModal({ staff, trigger }: Props) {
 
   return (
     <>
-      <span onClick={handleOpen} className="contents">{trigger}</span>
+      {trigger && <span onClick={handleOpen} className="contents">{trigger}</span>}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">

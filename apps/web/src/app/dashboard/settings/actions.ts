@@ -21,6 +21,8 @@ export async function getOutletSettings(): Promise<{
   const ctx = await getServerContext()
   if (!ctx) return null
   const { outletId } = ctx
+  // These settings belong to a single outlet; HQ users aren't scoped to one.
+  if (!outletId) return null
 
   const supabase = createAdminClient()
   const { data, error } = await supabase
@@ -56,6 +58,7 @@ export async function saveBusinessDetails(input: {
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
   const { outletId } = ctx
+  if (!outletId) return { error: 'Select an outlet before editing its business details.' }
 
   const supabase = createAdminClient()
   const { error } = await supabase
@@ -84,6 +87,7 @@ export async function saveOpeningHours(
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
   const { outletId } = ctx
+  if (!outletId) return { error: 'Select an outlet before editing its opening hours.' }
 
   try {
     const supabase = createAdminClient()

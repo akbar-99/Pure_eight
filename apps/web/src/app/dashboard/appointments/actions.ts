@@ -16,6 +16,9 @@ export async function createAppointment(input: {
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
   const { outletId, tenantId } = ctx
+  // appointments.outlet_id is NOT NULL, and HQ users carry no outlet. Without
+  // this the empty string reaches Postgres as invalid uuid input.
+  if (!outletId) return { error: 'Select an outlet before creating an appointment.' }
 
   const supabase = createAdminClient()
 
@@ -136,13 +139,15 @@ export async function getAppointmentsForDate(dateISO: string) {
   const [year, month, day] = dateISO.split('-').map(Number)
   const localStart = new Date(year, month - 1, day, 0, 0, 0).toISOString()
   const localEnd   = new Date(year, month - 1, day, 23, 59, 59).toISOString()
-  const { data } = await supabase
+  let apptQuery = supabase
     .from('appointments')
     .select('id,starts_at,ends_at,status,customers(full_name),appointment_items(services(name),staff(id,full_name))')
-    .eq('outlet_id', ctx.outletId)
     .gte('starts_at', localStart)
     .lt('starts_at', localEnd)
     .is('deleted_at', null)
+  // HQ users have no outlet — show the whole network rather than filtering by ''.
+  if (ctx.outletId) apptQuery = apptQuery.eq('outlet_id', ctx.outletId)
+  const { data } = await apptQuery
     .order('starts_at')
   return data ?? []
 }
@@ -170,12 +175,18 @@ export async function getFormData(): Promise<{
       .eq('is_active', true)
       .is('deleted_at', null)
       .order('display_order'),
-    supabase
-      .from('staff')
-      .select('id, full_name, role_title')
-      .eq('outlet_id', outletId)
-      .eq('status', 'active')
-      .is('deleted_at', null),
+    outletId
+      ? supabase
+          .from('staff')
+          .select('id, full_name, role_title')
+          .eq('outlet_id', outletId)
+          .eq('status', 'active')
+          .is('deleted_at', null)
+      : supabase
+          .from('staff')
+          .select('id, full_name, role_title')
+          .eq('status', 'active')
+          .is('deleted_at', null),
   ])
 
   const services = (svcRes.data ?? []).map((s) => ({

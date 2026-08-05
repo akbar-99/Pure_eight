@@ -21,6 +21,12 @@ export function QuickAddMenu() {
   const { outletId } = useCurrentContext()
 
   const [open, setOpen]             = useState(false)
+  /**
+   * Which modal is showing. The modals must render OUTSIDE the dropdown: they
+   * used to sit inside it, so selecting one closed the dropdown and unmounted
+   * the modal in the same render — nothing ever appeared.
+   */
+  const [modal, setModal]           = useState<'appointment' | 'customer' | 'lead' | null>(null)
   const [staff, setStaff]           = useState<StaffOption[]>([])
   const [services, setServices]     = useState<ServiceOption[]>([])
   const [dataLoaded, setDataLoaded] = useState(false)
@@ -52,13 +58,15 @@ export function QuickAddMenu() {
     if (dataLoaded || loading) return
     setLoading(true)
     const supabase = createClient()
+    // HQ users have no outlet — list network-wide rather than filtering by ''.
+    const staffQuery = supabase
+      .from('staff')
+      .select('id, full_name, role_title')
+      .eq('status', 'active')
+      .order('full_name')
+
     const [staffRes, servicesRes] = await Promise.all([
-      supabase
-        .from('staff')
-        .select('id, full_name, role_title')
-        .eq('outlet_id', outletId)
-        .eq('status', 'active')
-        .order('full_name'),
+      outletId ? staffQuery.eq('outlet_id', outletId) : staffQuery,
       supabase
         .from('services')
         .select('id, name, duration_mins, price')
@@ -90,6 +98,16 @@ export function QuickAddMenu() {
   function handleSale() {
     setOpen(false)
     router.push('/dashboard/pos')
+  }
+
+  /**
+   * Close the dropdown and show the chosen modal. Safe because the modals are
+   * siblings of the dropdown, not children of it. Each modal re-runs its own
+   * reset on open, so it picks up staff/services even if they arrived late.
+   */
+  function openModal(which: 'appointment' | 'customer' | 'lead') {
+    setOpen(false)
+    setModal(which)
   }
 
   return (
@@ -133,72 +151,74 @@ export function QuickAddMenu() {
             <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
           </button>
 
-          {/* New Appointment — modal */}
-          <NewAppointmentModal
-            staff={staff}
-            services={services}
-            trigger={
-              <button
-                role="menuitem"
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-offwhite transition-colors group text-left"
-                onClick={() => setOpen(false)}
-              >
-                <span className="h-8 w-8 rounded-[6px] bg-offwhite border border-silver flex items-center justify-center flex-shrink-0">
-                  <CalendarPlus className="h-4 w-4 text-charcoal" />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium text-charcoal">New Appointment</span>
-                  <span className="block text-xs text-grey">
-                    {loading ? 'Loading…' : 'Schedule a customer visit'}
-                  </span>
-                </span>
-                <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
-              </button>
-            }
-          />
+          {/* New Appointment */}
+          <button
+            role="menuitem"
+            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-offwhite transition-colors group text-left"
+            onClick={() => openModal('appointment')}
+          >
+            <span className="h-8 w-8 rounded-[6px] bg-offwhite border border-silver flex items-center justify-center flex-shrink-0">
+              <CalendarPlus className="h-4 w-4 text-charcoal" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-charcoal">New Appointment</span>
+              <span className="block text-xs text-grey">
+                {loading ? 'Loading…' : 'Schedule a customer visit'}
+              </span>
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
+          </button>
 
-          {/* New Customer — modal */}
-          <AddCustomerModal
-            trigger={
-              <button
-                role="menuitem"
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-offwhite transition-colors group text-left"
-                onClick={() => setOpen(false)}
-              >
-                <span className="h-8 w-8 rounded-[6px] bg-offwhite border border-silver flex items-center justify-center flex-shrink-0">
-                  <UserPlus className="h-4 w-4 text-charcoal" />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium text-charcoal">New Customer</span>
-                  <span className="block text-xs text-grey">Add a customer to the CRM</span>
-                </span>
-                <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
-              </button>
-            }
-          />
+          {/* New Customer */}
+          <button
+            role="menuitem"
+            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-offwhite transition-colors group text-left"
+            onClick={() => openModal('customer')}
+          >
+            <span className="h-8 w-8 rounded-[6px] bg-offwhite border border-silver flex items-center justify-center flex-shrink-0">
+              <UserPlus className="h-4 w-4 text-charcoal" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-charcoal">New Customer</span>
+              <span className="block text-xs text-grey">Add a customer to the CRM</span>
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
+          </button>
 
-          {/* New Lead — modal */}
-          <AddLeadModal
-            staff={staff}
-            trigger={
-              <button
-                role="menuitem"
-                className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-offwhite transition-colors group text-left"
-                onClick={() => setOpen(false)}
-              >
-                <span className="h-8 w-8 rounded-[6px] bg-offwhite border border-silver flex items-center justify-center flex-shrink-0">
-                  <Megaphone className="h-4 w-4 text-charcoal" />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium text-charcoal">New Lead</span>
-                  <span className="block text-xs text-grey">Capture a new sales lead</span>
-                </span>
-                <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
-              </button>
-            }
-          />
+          {/* New Lead */}
+          <button
+            role="menuitem"
+            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-offwhite transition-colors group text-left"
+            onClick={() => openModal('lead')}
+          >
+            <span className="h-8 w-8 rounded-[6px] bg-offwhite border border-silver flex items-center justify-center flex-shrink-0">
+              <Megaphone className="h-4 w-4 text-charcoal" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-charcoal">New Lead</span>
+              <span className="block text-xs text-grey">Capture a new sales lead</span>
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 text-silver group-hover:text-grey transition-colors" />
+          </button>
         </div>
       )}
+
+      {/* Rendered outside the dropdown so closing it does not unmount them. */}
+      <NewAppointmentModal
+        staff={staff}
+        services={services}
+        open={modal === 'appointment'}
+        onOpenChange={next => setModal(next ? 'appointment' : null)}
+      />
+      <AddCustomerModal
+        open={modal === 'customer'}
+        onOpenChange={next => setModal(next ? 'customer' : null)}
+      />
+      <AddLeadModal
+        staff={staff}
+        open={modal === 'lead'}
+        onOpenChange={next => setModal(next ? 'lead' : null)}
+      />
     </div>
   )
 }

@@ -46,6 +46,8 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
   const ctx = await getServerContext()
   if (!ctx) return { success: false, error: 'Not authenticated' }
   const { outletId, tenantId } = ctx
+  // bills.outlet_id is NOT NULL, and HQ users carry no outlet.
+  if (!outletId) return { success: false, error: 'Select an outlet before creating a bill.' }
 
   const supabase = createAdminClient()
 
@@ -185,7 +187,8 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
           .from('customers')
           .update({
             loyalty_points:         newBalance,
-            last_visited_outlet_id: outletId,
+            // '' when the user is HQ-scoped; the column is nullable.
+            last_visited_outlet_id: outletId || null,
           })
           .eq('id', input.customerId)
 
@@ -202,7 +205,7 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
         // Still update last_visited if no points earned
         await supabase
           .from('customers')
-          .update({ last_visited_outlet_id: outletId })
+          .update({ last_visited_outlet_id: outletId || null })
           .eq('id', input.customerId)
       }
     }
@@ -244,12 +247,14 @@ export async function getStaff() {
   const { outletId } = ctx
 
   const supabase = createAdminClient()
-  const { data } = await supabase
+  let staffQuery = supabase
     .from('staff')
     .select('id, full_name, role_title')
-    .eq('outlet_id', outletId)
     .eq('status', 'active')
     .is('deleted_at', null)
+  // HQ users have no outlet — list the whole network rather than filtering by ''.
+  if (outletId) staffQuery = staffQuery.eq('outlet_id', outletId)
+  const { data } = await staffQuery
   return data ?? []
 }
 

@@ -44,6 +44,49 @@ export async function addCustomer(input: {
   return { id: data.id }
 }
 
+export async function updateCustomer(
+  customerId: string,
+  input: {
+    full_name: string
+    mobile: string
+    email?: string
+    dob?: string
+    gender?: string
+  },
+): Promise<{ error?: string }> {
+  const ctx = await getServerContext()
+  if (!ctx) return { error: 'Not authenticated' }
+
+  if (!input.full_name.trim()) return { error: 'Name is required.' }
+  if (!input.mobile.trim())    return { error: 'Mobile number is required.' }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('customers')
+    .update({
+      full_name:  input.full_name.trim(),
+      mobile:     input.mobile.trim(),
+      email:      input.email?.trim() || null,
+      dob:        input.dob || null,
+      gender:     input.gender || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', customerId)
+    // Customers belong to a brand, so scope the write to the caller's tenant.
+    .eq('brand_id', ctx.tenantId)
+
+  if (error) {
+    // customers has a unique (brand_id, mobile) constraint.
+    if (error.code === '23505') {
+      return { error: 'Another customer already uses this mobile number.' }
+    }
+    return { error: error.message }
+  }
+
+  revalidatePath('/dashboard/customers')
+  return {}
+}
+
 export async function updateCustomerNotes(
   customerId: string,
   notes: string,

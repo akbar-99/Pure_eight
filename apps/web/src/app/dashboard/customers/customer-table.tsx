@@ -3,9 +3,10 @@ import { useState } from 'react'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { fmtDate } from '@/lib/utils'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Pencil } from 'lucide-react'
 import { getCustomerDetail } from './actions'
 import { CustomerDrawer } from './customer-drawer'
+import { AddCustomerModal, type EditableCustomer } from './add-customer-modal'
 
 type CustomerRow = {
   id: string
@@ -68,6 +69,7 @@ const TIER_V: Record<string, 'default' | 'outline' | 'accent' | 'black'> = {
 export function CustomerTable({ customers }: CustomerTableProps) {
   const [detail, setDetail] = useState<DetailResult | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<EditableCustomer | null>(null)
 
   async function handleRowClick(customer: CustomerRow) {
     if (loadingId) return
@@ -96,6 +98,7 @@ export function CustomerTable({ customers }: CustomerTableProps) {
               <th className="text-left px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Joined</th>
               <th className="text-center px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Points</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Tier</th>
+              <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -123,6 +126,28 @@ export function CustomerTable({ customers }: CustomerTableProps) {
                     {c.loyalty_tier}
                   </Badge>
                 </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    aria-label={`Edit ${c.full_name}`}
+                    title="Edit customer"
+                    // The row opens the detail drawer, so keep the click here.
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditing({
+                        id:        c.id,
+                        full_name: c.full_name,
+                        mobile:    c.mobile,
+                        email:     c.email,
+                        dob:       c.dob,
+                        gender:    c.gender,
+                      })
+                    }}
+                    className="h-7 w-7 inline-flex items-center justify-center rounded-[4px] text-steel hover:bg-pearl hover:text-black transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -135,6 +160,16 @@ export function CustomerTable({ customers }: CustomerTableProps) {
           bills={detail.bills}
           loyaltyTxns={detail.loyaltyTxns}
           onClose={() => setDetail(null)}
+        />
+      )}
+
+      {/* Keyed so the form re-initialises when a different customer is edited. */}
+      {editing && (
+        <AddCustomerModal
+          key={editing.id}
+          customer={editing}
+          open
+          onOpenChange={(next) => { if (!next) setEditing(null) }}
         />
       )}
     </>

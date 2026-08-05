@@ -3,7 +3,17 @@ import { ReactNode, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { X } from 'lucide-react'
-import { addCustomer } from './actions'
+import { addCustomer, updateCustomer } from './actions'
+
+/** The fields this form can edit. */
+export type EditableCustomer = {
+  id: string
+  full_name: string
+  mobile: string
+  email: string | null
+  dob: string | null
+  gender: string | null
+}
 
 interface AddCustomerModalProps {
   /** Omit in controlled mode — the parent renders its own opener. */
@@ -11,13 +21,17 @@ interface AddCustomerModalProps {
   /** Controlled mode: when provided, the parent owns the open state. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Supply to edit an existing customer; omit to create a new one. */
+  customer?: EditableCustomer
 }
 
 export function AddCustomerModal({
   trigger,
   open: openProp,
   onOpenChange,
+  customer,
 }: AddCustomerModalProps) {
+  const isEdit = customer !== undefined
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const isControlled = openProp !== undefined
   const open = isControlled ? openProp : uncontrolledOpen
@@ -30,18 +44,21 @@ export function AddCustomerModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [fullName, setFullName] = useState('')
-  const [mobile, setMobile] = useState('')
-  const [email, setEmail] = useState('')
-  const [dob, setDob] = useState('')
-  const [gender, setGender] = useState('')
+  // Seeded from `customer` so edit mode is populated on mount — the parent may
+  // render this already open, in which case the reset-on-open below never fires.
+  const [fullName, setFullName] = useState(customer?.full_name ?? '')
+  const [mobile, setMobile] = useState(customer?.mobile ?? '')
+  const [email, setEmail] = useState(customer?.email ?? '')
+  const [dob, setDob] = useState(customer?.dob ?? '')
+  const [gender, setGender] = useState(customer?.gender ?? '')
 
+  // In edit mode the form opens pre-filled with the customer's current values.
   function reset() {
-    setFullName('')
-    setMobile('')
-    setEmail('')
-    setDob('')
-    setGender('')
+    setFullName(customer?.full_name ?? '')
+    setMobile(customer?.mobile ?? '')
+    setEmail(customer?.email ?? '')
+    setDob(customer?.dob ?? '')
+    setGender(customer?.gender ?? '')
     setError(null)
   }
 
@@ -62,13 +79,16 @@ export function AddCustomerModal({
     if (!fullName.trim() || !mobile.trim()) return
     setLoading(true)
     setError(null)
-    const result = await addCustomer({
+    const payload = {
       full_name: fullName.trim(),
       mobile: mobile.trim(),
       email: email.trim() || undefined,
       dob: dob || undefined,
       gender: gender || undefined,
-    })
+    }
+    const result = isEdit
+      ? await updateCustomer(customer.id, payload)
+      : await addCustomer(payload)
     setLoading(false)
     if (result.error) {
       setError(result.error)
@@ -93,7 +113,7 @@ export function AddCustomerModal({
           <div className="relative z-10 bg-white rounded-[8px] border border-silver shadow-lg w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold text-charcoal" style={{ fontFamily: 'var(--font-playfair,serif)' }}>
-                Add New Customer
+                {isEdit ? 'Edit Customer' : 'Add New Customer'}
               </h2>
               <button
                 onClick={() => setOpen(false)}
@@ -170,7 +190,7 @@ export function AddCustomerModal({
                   className="flex-1"
                   loading={loading}
                 >
-                  Add Customer
+                  {isEdit ? 'Save Changes' : 'Add Customer'}
                 </Button>
               </div>
             </form>

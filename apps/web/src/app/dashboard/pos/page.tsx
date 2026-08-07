@@ -10,7 +10,8 @@ import { Separator }       from '@/components/ui/separator'
 import { Avatar }          from '@/components/ui/avatar'
 import { cn, fmtCurrency } from '@/lib/utils'
 import { Search, Plus, X, PlusCircle } from 'lucide-react'
-import { checkoutBill, getServices, getStaff, searchCustomers } from './actions'
+import { checkoutBill, getServices, getStaff, getProducts, searchCustomers } from './actions'
+import type { RetailProduct } from './actions'
 import { ReceiptModal, type ReceiptData } from './receipt-modal'
 import { CancelBillModal } from './cancel-bill-modal'
 import { AddCustomerModal } from '@/app/dashboard/customers/add-customer-modal'
@@ -22,7 +23,10 @@ type Customer = { id: string; full_name: string; mobile: string; loyalty_points:
 
 interface LineItem {
   id:          string
+  /** The service or inventory item this line bills for. */
   serviceId:   string
+  /** Products draw down stock on checkout; services do not. */
+  kind:        'service' | 'product'
   name:        string
   staffId:     string
   staffName:   string
@@ -64,6 +68,8 @@ export default function POSPage() {
   const [custResults,   setCustResults]   = useState<Customer[]>([])
   const [addingCustomer, setAddingCustomer] = useState(false)
   const [serviceSearch, setServiceSearch] = useState('')
+  const [products,      setProducts]      = useState<RetailProduct[]>([])
+  const [productSearch, setProductSearch] = useState('')
   const [lines,         setLines]         = useState<LineItem[]>([])
   const [notes,         setNotes]         = useState('')
   const [tip,           setTip]           = useState(0)       // paise
@@ -87,6 +93,7 @@ export default function POSPage() {
   useEffect(() => {
     getServices().then(setServices)
     getStaff().then(setStaff)
+    getProducts().then(setProducts)
   }, [])
 
   // Debounced customer lookup. Clearing on a too-short query happens in the input's
@@ -149,6 +156,7 @@ export default function POSPage() {
     setLines(prev => [...prev, {
       id:          crypto.randomUUID(),
       serviceId:   s.id,
+      kind:        'service',
       name:        s.name,
       staffId:     defaultStaff?.id ?? '',
       staffName:   defaultStaff?.full_name ?? '',
@@ -158,6 +166,26 @@ export default function POSPage() {
       taxPct:      Number(s.tax_rate),
     }])
     // The single payment row follows grandTotal automatically — see the sync below.
+  }
+
+  function addProductLine(p: RetailProduct) {
+    // A product is goods, not labour, so it carries no staff attribution — that
+    // would distort the staff-performance figures, which measure services done.
+    setLines(prev => [...prev, {
+      id:          crypto.randomUUID(),
+      serviceId:   p.id,
+      kind:        'product',
+      name:        p.name,
+      staffId:     '',
+      staffName:   '',
+      qty:         1,
+      unitPrice:   p.sale_price,
+      discountPct: 0,
+      taxPct:      Number(p.tax_rate),
+    }])
+    if (p.stock <= 0) {
+      toast.warning(`${p.name} is out of stock — selling anyway`)
+    }
   }
 
   function removeLine(id: string) { setLines(prev => prev.filter(l => l.id !== id)) }
@@ -205,7 +233,7 @@ export default function POSPage() {
         lines: lines.map(l => ({
           name:        l.name,
           itemId:      l.serviceId,
-          type:        'service' as const,
+          type:        l.kind,
           staffId:     l.staffId || undefined,
           qty:         l.qty,
           unitPrice:   l.unitPrice,
@@ -265,6 +293,11 @@ export default function POSPage() {
   const filtered = services.filter(s =>
     s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
     s.category.toLowerCase().includes(serviceSearch.toLowerCase())
+  )
+
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.category.toLowerCase().includes(productSearch.toLowerCase())
   )
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -394,6 +427,49 @@ export default function POSPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Products grid — retail items drawn from Inventory */}
+          {products.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Add Products</CardTitle></CardHeader>
+              <CardContent>
+                <Input
+                  placeholder="Search products…"
+                  prefix={<Search className="h-3.5 w-3.5" />}
+                  value={productSearch}
+                  onChange={e => setProductSearch(e.target.value)}
+                  className="mb-3"
+                />
+                {filteredProducts.length === 0 ? (
+                  <p className="text-sm text-grey text-center py-6">No products match</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {filteredProducts.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => addProductLine(p)}
+                        className="flex items-center justify-between p-3 rounded-[4px] border border-silver hover:border-black hover:bg-pearl text-left transition-colors group"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-charcoal">{p.name}</p>
+                          <p className="text-xs text-grey">
+                            {/* Out of stock is a warning, not a block — the sale is real either way. */}
+                            {p.stock > 0
+                              ? `${p.stock} ${p.unit} in stock · ${p.category}`
+                              : <span className="text-warning">Out of stock · {p.category}</span>}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-black">{fmtCurrency(p.sale_price)}</p>
+                          <Plus className="h-3.5 w-3.5 text-grey group-hover:text-black ml-auto mt-0.5" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Bill line items */}
           {lines.length > 0 && (

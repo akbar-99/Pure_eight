@@ -146,6 +146,48 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
       if (payError) return { success: false, error: payError.message }
     }
 
+    // 6b. Draw sold products out of stock and record the movement.
+    //
+    // Stock is allowed to go negative: a counter sale is real whether or not the
+    // system has caught up, and blocking it would be worse than a figure that
+    // the next stock-take corrects. The movement ledger keeps the audit trail.
+    const productLines = input.lines.filter(l => l.type === 'product' && l.itemId)
+    for (const line of productLines) {
+      const itemId = line.itemId as string
+
+      const { data: level } = await supabase
+        .from('stock_levels')
+        .select('id, quantity')
+        .eq('item_id', itemId)
+        .eq('outlet_id', outletId)
+        .maybeSingle()
+
+      const current = (level as { quantity: number } | null)?.quantity ?? 0
+      const next    = current - line.qty
+
+      if (level) {
+        await supabase
+          .from('stock_levels')
+          .update({ quantity: next, updated_at: new Date().toISOString() })
+          .eq('id', (level as { id: string }).id)
+      } else {
+        await supabase
+          .from('stock_levels')
+          .insert({ item_id: itemId, outlet_id: outletId, quantity: next })
+      }
+
+      await supabase.from('stock_movements').insert({
+        item_id:        itemId,
+        outlet_id:      outletId,
+        type:           'sale',
+        quantity:       -line.qty,
+        reference_type: 'bill',
+        reference_id:   bill.id,
+        created_by:     ctx.userId,
+        notes:          `Sold on ${billNumber}`,
+      })
+    }
+
     // 7. Loyalty points — redeem first, then earn
     if (input.customerId) {
       // Fetch current balance once
@@ -241,6 +283,51 @@ export async function getServices() {
     .is('deleted_at', null)
     .order('display_order')
   return data ?? []
+}
+
+export type RetailProduct = {
+  id:         string
+  name:       string
+  category:   string
+  unit:       string
+  sale_price: number   // paise
+  tax_rate:   number
+  stock:      number   // on hand at this outlet
+}
+
+/** Products offered at the till, with this outlet's stock on hand. */
+export async function getProducts(): Promise<RetailProduct[]> {
+  const ctx = await getServerContext()
+  if (!ctx) return []
+  const { tenantId, outletId } = ctx
+
+  const supabase = createAdminClient()
+  const { data: items } = await supabase
+    .from('inventory_items')
+    .select('id, name, category, unit, sale_price, tax_rate')
+    .eq('brand_id', tenantId)
+    .eq('is_retail', true)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .order('name')
+
+  const rows = (items ?? []) as unknown as Omit<RetailProduct, 'stock'>[]
+  if (rows.length === 0) return []
+
+  // Stock is per outlet; an item with no row yet simply has none.
+  const levels = outletId
+    ? (await supabase
+        .from('stock_levels')
+        .select('item_id, quantity')
+        .eq('outlet_id', outletId)
+        .in('item_id', rows.map(r => r.id))).data
+    : []
+
+  const stockByItem = new Map(
+    ((levels ?? []) as { item_id: string; quantity: number }[]).map(l => [l.item_id, l.quantity])
+  )
+
+  return rows.map(r => ({ ...r, stock: stockByItem.get(r.id) ?? 0 }))
 }
 
 export async function getStaff() {

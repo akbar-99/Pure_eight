@@ -1140,10 +1140,13 @@ export type Database = {
           hsn_code: string | null
           id: string
           is_active: boolean
+          is_retail: boolean
           name: string
           reorder_level: number
           reorder_qty: number
+          sale_price: number
           sku: string | null
+          tax_rate: number
           unit: string
           updated_at: string
         }
@@ -1158,10 +1161,13 @@ export type Database = {
           hsn_code?: string | null
           id?: string
           is_active?: boolean
+          is_retail?: boolean
           name: string
           reorder_level?: number
           reorder_qty?: number
+          sale_price?: number
           sku?: string | null
+          tax_rate?: number
           unit?: string
           updated_at?: string
         }
@@ -1176,10 +1182,13 @@ export type Database = {
           hsn_code?: string | null
           id?: string
           is_active?: boolean
+          is_retail?: boolean
           name?: string
           reorder_level?: number
           reorder_qty?: number
+          sale_price?: number
           sku?: string | null
+          tax_rate?: number
           unit?: string
           updated_at?: string
         }

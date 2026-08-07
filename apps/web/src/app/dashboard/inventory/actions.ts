@@ -13,7 +13,10 @@ export type InventoryItem = {
   sku:           string | null
   category:      string
   unit:          string
-  cost_price:    number    // paise
+  cost_price:    number    // paise — what we pay
+  sale_price:    number    // paise — what the customer pays; 0 when not sold
+  tax_rate:      number    // GST %, e.g. 18
+  is_retail:     boolean   // offered for sale in Quick Sale
   reorder_level: number
   reorder_qty:   number
   hsn_code:      string | null
@@ -162,6 +165,8 @@ export async function addInventoryItem(input: {
   name: string; sku?: string; category: string; unit: string
   cost_price: number; reorder_level: number; reorder_qty: number
   hsn_code?: string; description?: string
+  // Retail fields — rupees in, paise stored. Omitted for pure consumables.
+  sale_price?: number; tax_rate?: number; is_retail?: boolean
 }): Promise<{ error?: string; id?: string }> {
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
@@ -176,6 +181,9 @@ export async function addInventoryItem(input: {
       category:       input.category,
       unit:           input.unit,
       cost_price:     Math.round(input.cost_price * 100),
+      sale_price:     Math.round((input.sale_price ?? 0) * 100),
+      tax_rate:       input.tax_rate ?? 0,
+      is_retail:      input.is_retail ?? false,
       reorder_level:  input.reorder_level,
       reorder_qty:    input.reorder_qty,
       hsn_code:       input.hsn_code ?? null,
@@ -190,7 +198,11 @@ export async function addInventoryItem(input: {
 
 export async function updateInventoryItem(
   id: string,
-  input: Partial<{ name: string; sku: string; category: string; unit: string; cost_price: number; reorder_level: number; reorder_qty: number; is_active: boolean }>
+  input: Partial<{
+    name: string; sku: string; category: string; unit: string
+    cost_price: number; reorder_level: number; reorder_qty: number; is_active: boolean
+    sale_price: number; tax_rate: number; is_retail: boolean
+  }>
 ): Promise<{ error?: string }> {
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
@@ -205,6 +217,9 @@ export async function updateInventoryItem(
   if (input.reorder_level !== undefined)  patch.reorder_level = input.reorder_level
   if (input.reorder_qty !== undefined)    patch.reorder_qty = input.reorder_qty
   if (input.is_active !== undefined)      patch.is_active = input.is_active
+  if (input.sale_price !== undefined)     patch.sale_price = Math.round(input.sale_price * 100)
+  if (input.tax_rate !== undefined)       patch.tax_rate = input.tax_rate
+  if (input.is_retail !== undefined)      patch.is_retail = input.is_retail
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await admin.from('inventory_items').update(patch as any).eq('id', id)

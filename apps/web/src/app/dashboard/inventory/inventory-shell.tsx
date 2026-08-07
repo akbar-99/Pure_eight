@@ -40,11 +40,14 @@ interface ItemFormState {
   name: string; sku: string; category: string; unit: string
   cost_price: string; reorder_level: string; reorder_qty: string
   hsn_code: string; description: string
+  is_retail: boolean; sale_price: string; tax_rate: string
 }
 
 const BLANK_FORM: ItemFormState = {
   name: '', sku: '', category: 'general', unit: 'piece',
   cost_price: '', reorder_level: '0', reorder_qty: '0', hsn_code: '', description: '',
+  // Most stock is consumed during services, so an item is not for sale unless said so.
+  is_retail: false, sale_price: '', tax_rate: '18',
 }
 
 function ItemModal({
@@ -56,6 +59,9 @@ function ItemModal({
       unit: initial.unit, cost_price: (initial.cost_price / 100).toString(),
       reorder_level: initial.reorder_level.toString(), reorder_qty: initial.reorder_qty.toString(),
       hsn_code: initial.hsn_code ?? '', description: initial.description ?? '',
+      is_retail: initial.is_retail ?? false,
+      sale_price: initial.sale_price ? (initial.sale_price / 100).toString() : '',
+      tax_rate: (initial.tax_rate ?? 18).toString(),
     } : BLANK_FORM
   )
   const [isPending, startTransition] = useTransition()
@@ -67,6 +73,10 @@ function ItemModal({
 
   function submit() {
     if (!form.name.trim()) { toast.error('Name required'); return }
+    if (form.is_retail && !(parseFloat(form.sale_price) > 0)) {
+      toast.error('A product for sale needs a selling price')
+      return
+    }
     startTransition(async () => {
       const payload = {
         name: form.name.trim(), sku: form.sku || undefined,
@@ -76,6 +86,9 @@ function ItemModal({
         reorder_qty: parseInt(form.reorder_qty) || 0,
         hsn_code: form.hsn_code || undefined,
         description: form.description || undefined,
+        is_retail: form.is_retail,
+        sale_price: parseFloat(form.sale_price) || 0,
+        tax_rate: parseFloat(form.tax_rate) || 0,
       }
       const res = mode === 'add'
         ? await addInventoryItem(payload)
@@ -125,6 +138,40 @@ function ItemModal({
               <input type="number" min="0" step="0.01" value={form.cost_price} onChange={f('cost_price')}
                 className="w-full text-sm border border-silver rounded-[6px] px-3 py-2 focus:outline-none focus:border-black" />
             </div>
+            {/* Retail — spans both columns so the sale fields read as one group. */}
+            <div className="col-span-2 border-t border-pearl pt-3 mt-1">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.is_retail}
+                  onChange={e => setForm(p => ({ ...p, is_retail: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 accent-black"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-charcoal">Sell this in the shop</span>
+                  <span className="block text-xs text-grey">
+                    Adds it to Quick Sale. Leave off for stock only used during services.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {form.is_retail && (
+              <>
+                <div>
+                  <label className="text-xs font-medium text-charcoal block mb-1">Selling Price (₹)</label>
+                  <input type="number" min="0" step="0.01" value={form.sale_price} onChange={f('sale_price')}
+                    placeholder="e.g. 699"
+                    className="w-full text-sm border border-silver rounded-[6px] px-3 py-2 focus:outline-none focus:border-black" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-charcoal block mb-1">GST (%)</label>
+                  <input type="number" min="0" max="100" step="0.01" value={form.tax_rate} onChange={f('tax_rate')}
+                    className="w-full text-sm border border-silver rounded-[6px] px-3 py-2 focus:outline-none focus:border-black" />
+                </div>
+              </>
+            )}
+
             <div>
               <label className="text-xs font-medium text-charcoal block mb-1">Reorder Level</label>
               <input type="number" min="0" value={form.reorder_level} onChange={f('reorder_level')}
@@ -440,7 +487,7 @@ export function InventoryShell({ initial }: Props) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-silver bg-offwhite">
-                      {['Item', 'SKU', 'Category', 'Unit', 'Cost', 'Stock', 'Reorder At', ''].map(h => (
+                      {['Item', 'SKU', 'Category', 'Unit', 'Cost', 'Sells At', 'Stock', 'Reorder At', ''].map(h => (
                         <th key={h} className="text-left px-4 py-2 font-medium text-grey uppercase tracking-wide">{h}</th>
                       ))}
                     </tr>
@@ -453,6 +500,12 @@ export function InventoryShell({ initial }: Props) {
                         <td className="px-4 py-3 text-grey">{item.category}</td>
                         <td className="px-4 py-3 text-grey">{item.unit}</td>
                         <td className="px-4 py-3 font-mono">{fmtRs(item.cost_price)}</td>
+                        {/* Only retail items have a selling price; consumables show a dash. */}
+                        <td className="px-4 py-3 font-mono">
+                          {item.is_retail
+                            ? <span className="text-charcoal">{fmtRs(item.sale_price)}</span>
+                            : <span className="text-silver">—</span>}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`font-semibold ${item.isLow && item.reorder_level > 0 ? 'text-orange-600' : 'text-charcoal'}`}>
                             {item.stock} {item.unit}

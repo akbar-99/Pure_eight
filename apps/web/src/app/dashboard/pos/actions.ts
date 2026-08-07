@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { getServerContext } from '@/lib/context/server'
+import { getServerContext, requireServerContext } from '@/lib/context/server'
 
 interface LineItemInput {
   name: string
@@ -43,8 +43,7 @@ export interface CheckoutResult {
 }
 
 export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult> {
-  const ctx = await getServerContext()
-  if (!ctx) return { success: false, error: 'Not authenticated' }
+  const ctx = await requireServerContext()
   const { outletId, tenantId } = ctx
   // bills.outlet_id is NOT NULL, and HQ users carry no outlet.
   if (!outletId) return { success: false, error: 'Select an outlet before creating a bill.' }
@@ -287,8 +286,8 @@ export async function cancelBill(
   billId: string,
   reason: string,
 ): Promise<{ error?: string }> {
-  const ctx = await getServerContext()
-  if (!ctx) return { error: 'Not authenticated' }
+  // Redirects to sign-in when the session has lapsed.
+  await requireServerContext()
   const supabase = createAdminClient()
 
   const { error } = await supabase

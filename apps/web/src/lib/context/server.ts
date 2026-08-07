@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -83,4 +84,21 @@ export async function getServerContext(): Promise<ServerContext | null> {
 
   const role = (membership.roles as { name: string } | null)?.name ?? 'outlet_manager'
   return buildContext(user.id, membership.tenant_id, membership.outlet_id ?? '', role)
+}
+
+/**
+ * Same as getServerContext, but sends the user to sign in instead of returning
+ * null. Use it in mutations.
+ *
+ * Access tokens last an hour (jwt_expiry = 3600). A page like Quick Sale is
+ * client-rendered, so a user can sit on it past expiry without any navigation to
+ * refresh the token — the next write then failed with a bare "Not authenticated"
+ * inside the form, which gave no hint that signing in again was the fix.
+ */
+export async function requireServerContext(): Promise<ServerContext> {
+  const ctx = await getServerContext()
+  if (!ctx) {
+    redirect('/auth/login?error=' + encodeURIComponent('Your session expired — please sign in again.'))
+  }
+  return ctx
 }

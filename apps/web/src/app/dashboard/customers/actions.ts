@@ -1,7 +1,7 @@
 'use server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { getServerContext } from '@/lib/context/server'
+import { requireServerContext } from '@/lib/context/server'
 
 export async function addCustomer(input: {
   full_name: string
@@ -10,8 +10,7 @@ export async function addCustomer(input: {
   dob?: string
   gender?: string
 }): Promise<{ error?: string; id?: string }> {
-  const ctx = await getServerContext()
-  if (!ctx) return { error: 'Not authenticated' }
+  const ctx = await requireServerContext()
   const { outletId, tenantId } = ctx
 
   const supabase = createAdminClient()
@@ -54,8 +53,7 @@ export async function updateCustomer(
     gender?: string
   },
 ): Promise<{ error?: string }> {
-  const ctx = await getServerContext()
-  if (!ctx) return { error: 'Not authenticated' }
+  const ctx = await requireServerContext()
 
   if (!input.full_name.trim()) return { error: 'Name is required.' }
   if (!input.mobile.trim())    return { error: 'Mobile number is required.' }
@@ -91,8 +89,8 @@ export async function updateCustomerNotes(
   customerId: string,
   notes: string,
 ): Promise<{ error?: string }> {
-  const ctx = await getServerContext()
-  if (!ctx) return { error: 'Not authenticated' }
+  // Redirects to sign-in when the session has lapsed.
+  await requireServerContext()
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('customers')

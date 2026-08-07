@@ -23,6 +23,14 @@ interface AddCustomerModalProps {
   onOpenChange?: (open: boolean) => void
   /** Supply to edit an existing customer; omit to create a new one. */
   customer?: EditableCustomer
+  /** Seed the blank form — e.g. the term already typed into a POS search. */
+  initialName?: string
+  initialMobile?: string
+  /**
+   * Fired after a successful create, so a caller such as Quick Sale can select
+   * the new customer straight onto the bill instead of re-searching for them.
+   */
+  onCreated?: (customer: { id: string; full_name: string; mobile: string }) => void
 }
 
 export function AddCustomerModal({
@@ -30,6 +38,9 @@ export function AddCustomerModal({
   open: openProp,
   onOpenChange,
   customer,
+  initialName = '',
+  initialMobile = '',
+  onCreated,
 }: AddCustomerModalProps) {
   const isEdit = customer !== undefined
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
@@ -46,16 +57,16 @@ export function AddCustomerModal({
 
   // Seeded from `customer` so edit mode is populated on mount — the parent may
   // render this already open, in which case the reset-on-open below never fires.
-  const [fullName, setFullName] = useState(customer?.full_name ?? '')
-  const [mobile, setMobile] = useState(customer?.mobile ?? '')
+  const [fullName, setFullName] = useState(customer?.full_name ?? initialName)
+  const [mobile, setMobile] = useState(customer?.mobile ?? initialMobile)
   const [email, setEmail] = useState(customer?.email ?? '')
   const [dob, setDob] = useState(customer?.dob ?? '')
   const [gender, setGender] = useState(customer?.gender ?? '')
 
   // In edit mode the form opens pre-filled with the customer's current values.
   function reset() {
-    setFullName(customer?.full_name ?? '')
-    setMobile(customer?.mobile ?? '')
+    setFullName(customer?.full_name ?? initialName)
+    setMobile(customer?.mobile ?? initialMobile)
     setEmail(customer?.email ?? '')
     setDob(customer?.dob ?? '')
     setGender(customer?.gender ?? '')
@@ -86,15 +97,23 @@ export function AddCustomerModal({
       dob: dob || undefined,
       gender: gender || undefined,
     }
-    const result = isEdit
-      ? await updateCustomer(customer.id, payload)
-      : await addCustomer(payload)
-    setLoading(false)
-    if (result.error) {
-      setError(result.error)
+    // Branch rather than share a result variable: only addCustomer returns an id,
+    // and a union of the two shapes loses that field under narrowing.
+    if (isEdit) {
+      const result = await updateCustomer(customer.id, payload)
+      setLoading(false)
+      if (result.error) { setError(result.error); return }
     } else {
-      setOpen(false)
+      const result = await addCustomer(payload)
+      setLoading(false)
+      if (result.error) { setError(result.error); return }
+      // Pair the new id with the values just submitted, so the caller can use
+      // the customer without a follow-up fetch.
+      if (result.id) {
+        onCreated?.({ id: result.id, full_name: payload.full_name, mobile: payload.mobile })
+      }
     }
+    setOpen(false)
   }
 
   return (

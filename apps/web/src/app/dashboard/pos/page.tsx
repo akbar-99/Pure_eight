@@ -13,6 +13,7 @@ import { Search, Plus, X, PlusCircle } from 'lucide-react'
 import { checkoutBill, getServices, getStaff, searchCustomers } from './actions'
 import { ReceiptModal, type ReceiptData } from './receipt-modal'
 import { CancelBillModal } from './cancel-bill-modal'
+import { AddCustomerModal } from '@/app/dashboard/customers/add-customer-modal'
 import { toast }           from 'sonner'
 
 type Service  = { id: string; name: string; category: string; price: number; duration_mins: number; tax_rate: number }
@@ -61,6 +62,7 @@ export default function POSPage() {
   const [customer,      setCustomer]      = useState<Customer | null>(null)
   const [custSearch,    setCustSearch]    = useState('')
   const [custResults,   setCustResults]   = useState<Customer[]>([])
+  const [addingCustomer, setAddingCustomer] = useState(false)
   const [serviceSearch, setServiceSearch] = useState('')
   const [lines,         setLines]         = useState<LineItem[]>([])
   const [notes,         setNotes]         = useState('')
@@ -312,8 +314,25 @@ export default function POSPage() {
                     </div>
                   )}
                   {custSearch.length >= 2 && custResults.length === 0 && (
-                    <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-silver rounded-[4px] p-3">
-                      <p className="text-xs text-grey">No customers found — bill as walk-in</p>
+                    <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-silver rounded-[4px] shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden">
+                      <p className="px-3 pt-3 pb-2 text-xs text-grey">
+                        No customers found — bill as walk-in, or
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setAddingCustomer(true)}
+                        className="flex items-center gap-3 w-full px-3 py-2.5 border-t border-pearl hover:bg-pearl text-left transition-colors"
+                      >
+                        <span className="h-8 w-8 rounded-full bg-black flex items-center justify-center flex-shrink-0">
+                          <Plus className="h-4 w-4 text-white" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-medium text-charcoal">
+                            Add &ldquo;{custSearch}&rdquo; as a new customer
+                          </span>
+                          <span className="block text-xs text-grey">Name and mobile only</span>
+                        </span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -622,6 +641,27 @@ export default function POSPage() {
           </Card>
         </div>
       </div>
+
+      {/* Inline customer creation (FR-POS-01). Keyed on the search term so the
+          prefill refreshes if the receptionist retypes before opening it. */}
+      {addingCustomer && (
+        <AddCustomerModal
+          key={custSearch}
+          open
+          onOpenChange={next => { if (!next) setAddingCustomer(false) }}
+          // A search that is all digits is a phone number, not a name.
+          initialName={/^[\d\s+()-]+$/.test(custSearch) ? '' : custSearch}
+          initialMobile={/^[\d\s+()-]+$/.test(custSearch) ? custSearch.trim() : ''}
+          onCreated={c => {
+            // Matches the defaults addCustomer writes for a new record.
+            setCustomer({ ...c, loyalty_points: 0, loyalty_tier: 'standard' })
+            setCustSearch('')
+            setCustResults([])
+            setAddingCustomer(false)
+            toast.success(`${c.full_name} added`)
+          }}
+        />
+      )}
     </div>
   )
 }

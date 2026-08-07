@@ -175,6 +175,8 @@ export default function POSPage() {
 
   // ─── Checkout ────────────────────────────────────────────────────────────────
   function handleCheckout() {
+    // Every bill is attached to a customer — no anonymous walk-in billing.
+    if (!customer) { toast.error('Select a customer before checking out'); return }
     if (lines.length === 0) { toast.error('Add at least one service'); return }
     if (remaining > 0) { toast.error(`Payment short by ${fmtCurrency(remaining)}`); return }
 
@@ -316,7 +318,7 @@ export default function POSPage() {
                   {custSearch.length >= 2 && custResults.length === 0 && (
                     <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-silver rounded-[4px] shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden">
                       <p className="px-3 pt-3 pb-2 text-xs text-grey">
-                        No customers found — bill as walk-in, or
+                        No match — every bill needs a customer
                       </p>
                       <button
                         type="button"
@@ -626,10 +628,18 @@ export default function POSPage() {
                     <p className="text-xs text-grey text-center mt-2">+{pointsToEarn} loyalty pts earned</p>
                   )}
 
+                  {/* Say why checkout is unavailable — a disabled button on its own
+                      leaves the receptionist guessing. */}
+                  {!customer && (
+                    <p className="text-xs text-danger text-center mt-3">
+                      Select a customer to complete this bill
+                    </p>
+                  )}
+
                   <Button
                     className="w-full mt-3"
                     size="lg"
-                    disabled={lines.length === 0 || remaining > 0 || isPending}
+                    disabled={!customer || lines.length === 0 || remaining > 0 || isPending}
                     loading={isPending}
                     onClick={handleCheckout}
                   >

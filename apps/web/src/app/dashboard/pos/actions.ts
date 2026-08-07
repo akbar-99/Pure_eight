@@ -47,6 +47,9 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
   const { outletId, tenantId } = ctx
   // bills.outlet_id is NOT NULL, and HQ users carry no outlet.
   if (!outletId) return { success: false, error: 'Select an outlet before creating a bill.' }
+  // Every bill belongs to a customer. Enforced here as well as in the UI so the
+  // rule holds for any caller, not just the Quick Sale screen.
+  if (!input.customerId) return { success: false, error: 'Select a customer before creating a bill.' }
 
   const supabase = createAdminClient()
 

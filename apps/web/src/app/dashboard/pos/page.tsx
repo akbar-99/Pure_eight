@@ -124,20 +124,21 @@ export default function POSPage() {
   const remaining = grandTotal - totalPaid
 
   /**
-   * Keep a lone, untouched payment row equal to the bill total.
+   * A single payment row always equals the bill total.
    *
-   * addLine used to guess this as `grandTotal + s.price`, reading a grandTotal
-   * that predated the line it was adding and ignoring tax — a ₹164 service with
-   * 18% GST filled ₹164 against a ₹194 total and left ₹30 "Remaining", blocking
-   * checkout. Syncing against the computed total instead also keeps it right when
-   * a discount, tip or points redemption changes the figure. Once the cashier
-   * edits an amount or adds a second mode they own the split, so this backs off.
+   * Recomputed whenever the total moves — adding or removing a line, a discount,
+   * a tip, a points redemption — so the row can never hold a figure from an
+   * earlier version of the bill. Removing an item used to leave the old, larger
+   * amount behind and report a phantom balance.
+   *
+   * Splitting across modes is the one case the cashier owns, and that means two
+   * or more rows, so the count is the condition. Deleting rows back down to one
+   * resumes the sync, which is right: one row is the whole bill again.
    */
-  const [paymentsTouched, setPaymentsTouched] = useState(false)
-  const [prevGrandTotal, setPrevGrandTotal]   = useState(grandTotal)
+  const [prevGrandTotal, setPrevGrandTotal] = useState(grandTotal)
   if (grandTotal !== prevGrandTotal) {
     setPrevGrandTotal(grandTotal)
-    if (!paymentsTouched && payments.length === 1) {
+    if (payments.length === 1 && payments[0].amount !== grandTotal) {
       setPayments([{ ...payments[0], amount: grandTotal }])
     }
   }
@@ -168,14 +169,10 @@ export default function POSPage() {
 
   // Payment split helpers
   function updatePayment(id: string, field: 'mode' | 'amount', val: string | number) {
-    // Editing the amount hands the split to the cashier; changing only the mode
-    // (cash → card) should still track the total.
-    if (field === 'amount') setPaymentsTouched(true)
     setPayments(prev => prev.map(p => p.id === id ? { ...p, [field]: val } : p))
   }
 
   function addPayment() {
-    setPaymentsTouched(true)
     const usedModes = payments.map(p => p.mode)
     const nextMode  = PAYMENT_MODES.find(m => !usedModes.includes(m.value))?.value ?? 'cash'
     setPayments(prev => [...prev, { id: crypto.randomUUID(), mode: nextMode, amount: 0 }])
@@ -183,13 +180,11 @@ export default function POSPage() {
 
   function removePayment(id: string) {
     if (payments.length === 1) return
-    setPaymentsTouched(true)
     setPayments(prev => prev.filter(p => p.id !== id))
   }
 
   function fillRemaining(id: string) {
     if (remaining <= 0) return
-    setPaymentsTouched(true)
     setPayments(prev => prev.map(p => p.id === id ? { ...p, amount: p.amount + remaining } : p))
   }
 
@@ -265,7 +260,6 @@ export default function POSPage() {
     setDiscountType('none'); setDiscountInput(0)
     setLoyaltyRedeem(0); setNotes(''); setTip(0)
     setPayments([{ id: '1', mode: 'cash', amount: 0 }])
-    setPaymentsTouched(false)
   }
 
   const filtered = services.filter(s =>

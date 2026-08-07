@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { fetchDashboardData } from './actions'
 import type { DashboardData, DateRange } from './actions'
@@ -45,6 +45,26 @@ export function DashboardShell({ initial }: DashboardShellProps) {
   function refresh() {
     load(range)
   }
+
+  /**
+   * Live-refresh current-day figures every 60s (FR-DASH-08). Ranges that end in
+   * the past can't change, so they aren't polled. This deliberately avoids
+   * startTransition: isPending dims the whole dashboard, which would flicker
+   * once a minute for a silent background update.
+   */
+  const includesToday = range.to >= todayRange().to
+  useEffect(() => {
+    if (!includesToday) return
+    let cancelled = false
+    const timer = setInterval(async () => {
+      const fresh = await fetchDashboardData(range)
+      if (!cancelled) setData(fresh)
+    }, 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [includesToday, range])
 
   return (
     <div className={isPending ? 'opacity-60 transition-opacity duration-200 pointer-events-none' : ''}>

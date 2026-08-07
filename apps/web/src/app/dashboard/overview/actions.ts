@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient }      from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getServerContext }  from '@/lib/context/server'
 
 // ── Date range types ──────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ function todayRange(): DateRange {
 // ── Snapshot builder for a date window ───────────────────────────────────────
 
 async function fetchSnapshot(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   bounds: { start: string; end: string },
   outletFilter: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>,
   tenantId: string,
@@ -202,7 +202,13 @@ export async function fetchDashboardData(
   range?: DateRange,
 ): Promise<DashboardData> {
   const ctx      = await getServerContext()
-  const supabase = await createClient()
+  // The RLS-bound client returns nothing here: every policy on bills/appointments
+  // keys off custom JWT claims (jwt_outlet_id / jwt_tenant_id), and the
+  // set_custom_claims access-token hook is not enabled on this project, so those
+  // claims are absent and every policy evaluates false. The dashboard was the only
+  // module still using it. Scoping below is enforced in application code via
+  // outletFilter + tenantId, matching the other 27 modules.
+  const supabase = createAdminClient()
 
   const resolved = range ?? todayRange()
   const { from, to } = resolved

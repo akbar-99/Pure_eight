@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { istNow } from '@/lib/utils'
 import { getServerContext }  from '@/lib/context/server'
 
 // ── Date range types ──────────────────────────────────────────────────────────
@@ -88,7 +89,7 @@ export type DashboardData = {
 
 function istTodayStr() {
   const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
+  const ist = istNow(now)
   return ist.toISOString().slice(0, 10)
 }
 

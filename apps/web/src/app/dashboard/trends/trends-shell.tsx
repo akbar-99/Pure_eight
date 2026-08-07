@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { istNow } from '@/lib/utils'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell,
@@ -30,7 +31,7 @@ function fmtDate(iso: string, gran: TrendGranularity) {
 
 function istToday(): string {
   const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
+  const ist = istNow(now)
   return ist.toISOString().slice(0, 10)
 }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { istNow } from '@/lib/utils'
 import { Calculator, Settings, AlertTriangle, CheckCircle, Plus, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +25,7 @@ function fmtDate(iso: string) {
 
 function istToday(): string {
   const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
+  const ist = istNow(now)
   return ist.toISOString().slice(0, 10)
 }
 

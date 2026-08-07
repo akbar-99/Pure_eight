@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { istNow } from '@/lib/utils'
 import { Download, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +15,7 @@ import { toast } from 'sonner'
 
 function getTodayRange(): DateRange {
   const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
+  const ist = istNow(now)
   const today = ist.toISOString().slice(0, 10)
   return { preset: 'today', from: today, to: today }
 }

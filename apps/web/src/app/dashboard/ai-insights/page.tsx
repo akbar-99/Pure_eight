@@ -1,4 +1,5 @@
 import { PageHeader }      from '@/components/shared/page-header'
+import { istNow } from '@/lib/utils'
 import { Card }            from '@/components/ui/card'
 import { getServerContext } from '@/lib/context/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -20,8 +21,7 @@ export default async function AIInsightsPage() {
   const admin = createAdminClient()
 
   const now = new Date()
-  const istNow = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
-  const today = istNow.toISOString().slice(0, 10)
+  const today = istNow(now).toISOString().slice(0, 10)
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000).toISOString()
   const sixtyDaysAgo  = new Date(now.getTime() - 60 * 86_400_000).toISOString()
 

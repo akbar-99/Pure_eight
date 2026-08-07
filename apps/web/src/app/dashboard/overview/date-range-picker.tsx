@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { istNow } from '@/lib/utils'
 import type { DateRange, DateRangePreset } from './actions'
 
 interface DateRangePickerProps {
@@ -11,7 +12,7 @@ interface DateRangePickerProps {
 
 function istTodayStr() {
   const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
+  const ist = istNow(now)
   return ist.toISOString().slice(0, 10)
 }
 

@@ -1,6 +1,7 @@
 'use server'
 // Staff HR actions for roster, attendance, leave
 import { createAdminClient } from '@/lib/supabase/admin'
+import { istNow } from '@/lib/utils'
 import { getServerContext } from '@/lib/context/server'
 import { revalidatePath } from 'next/cache'
 
@@ -30,7 +31,7 @@ export type HRPageData = {
 // Get IST today
 function istToday() {
   const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 3600_000) + now.getTimezoneOffset() * 60_000)
+  const ist = istNow(now)
   return ist.toISOString().slice(0, 10)
 }
 

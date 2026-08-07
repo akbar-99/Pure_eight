@@ -1,8 +1,8 @@
 'use client'
 
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -10,6 +10,16 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import type { DailyPoint } from './actions'
+
+/**
+ * Metallic accent for the trend stroke — the one place the monochrome system
+ * allows colour ("monochrome with a single accent stroke").
+ *
+ * Not the brand's #8C7853: at chroma 0.058 that sits under the chroma floor and
+ * renders as grey rather than gold. #A8801B is the nearest gold that clears the
+ * lightness band, the chroma floor and 3:1 contrast on a white card.
+ */
+const GOLD = '#A8801B'
 
 interface RevenueChartProps {
   daily: DailyPoint[]
@@ -77,16 +87,24 @@ export function RevenueChart({ daily }: RevenueChartProps) {
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height={180}>
-        <LineChart
+      <ResponsiveContainer width="100%" height={200}>
+        <AreaChart
           data={daily}
-          margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+          // Right margin leaves room for the final x-label, which is centred on
+          // the last point and would otherwise be clipped by the card edge.
+          margin={{ top: 8, right: 20, left: 0, bottom: 0 }}
         >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="#E8E8E8"
-            vertical={false}
-          />
+          <defs>
+            {/* Wash under the curve — fades out so it never reads as a solid block. */}
+            <linearGradient id="revenueWash" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor={GOLD} stopOpacity={0.22} />
+              <stop offset="70%"  stopColor={GOLD} stopOpacity={0.05} />
+              <stop offset="100%" stopColor={GOLD} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+
+          {/* Hairline and solid: dashed gridlines compete with the data. */}
+          <CartesianGrid stroke="#EFEFEF" strokeWidth={1} vertical={false} />
           <XAxis
             dataKey="date"
             tickFormatter={tickFormatter}
@@ -94,6 +112,7 @@ export function RevenueChart({ daily }: RevenueChartProps) {
             axisLine={false}
             tickLine={false}
             interval={0}
+            dy={4}
           />
           <YAxis
             tickFormatter={fmtRupees}
@@ -102,16 +121,34 @@ export function RevenueChart({ daily }: RevenueChartProps) {
             tickLine={false}
             width={48}
           />
-          <Tooltip content={<CustomTooltip />} />
-          <Line
+          <Tooltip
+            content={<CustomTooltip />}
+            // Crosshair snaps to the nearest x rather than requiring a pixel-perfect hit.
+            cursor={{ stroke: GOLD, strokeWidth: 1, strokeOpacity: 0.45 }}
+          />
+          <Area
+            // Shape-preserving: smooth like a wave, but it cannot overshoot below
+            // zero the way a natural spline does — that would draw negative revenue.
             type="monotone"
             dataKey="revenue"
-            stroke="#000000"
-            strokeWidth={1.5}
-            dot={false}
-            activeDot={{ r: 4, fill: '#000000', stroke: '#ffffff', strokeWidth: 2 }}
+            stroke={GOLD}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="url(#revenueWash)"
+            // The dashboard re-fetches every 60s; replaying a 1.5s draw-on each
+            // time is distracting rather than delightful.
+            isAnimationActive={false}
+            // Short ranges get visible points; a single day would otherwise draw
+            // nothing at all, since a line between one point has no length.
+            dot={
+              daily.length <= 14
+                ? { r: 3, fill: GOLD, stroke: '#FFFFFF', strokeWidth: 2 }
+                : false
+            }
+            activeDot={{ r: 4.5, fill: GOLD, stroke: '#FFFFFF', strokeWidth: 2 }}
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   )

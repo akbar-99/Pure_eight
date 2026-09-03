@@ -9,6 +9,7 @@ import { Badge }           from '@/components/ui/badge'
 import { Separator }       from '@/components/ui/separator'
 import { Avatar }          from '@/components/ui/avatar'
 import { cn, fmtCurrency } from '@/lib/utils'
+import { PAYMENT_MODES as ALL_PAYMENT_MODES } from '@/lib/constants'
 import { Search, Plus, X, PlusCircle } from 'lucide-react'
 import { checkoutBill, getServices, getStaff, getProducts, searchCustomers } from './actions'
 import type { RetailProduct } from './actions'
@@ -42,15 +43,18 @@ interface SplitPayment {
   amount: number   // paise — user edits as rupees
 }
 
-const PAYMENT_MODES = [
-  { value: 'cash',    label: 'Cash'    },
-  { value: 'card',    label: 'Card'    },
-  { value: 'upi',     label: 'UPI'     },
-  { value: 'wallet',  label: 'Wallet'  },
-  { value: 'bank',    label: 'Bank'    },
-  { value: 'prepaid', label: 'Prepaid' },
-  { value: 'voucher', label: 'Voucher' },
-]
+/**
+ * Selectable payment modes, taken from the shared list so they stay in step with
+ * the bill_payments_mode_check constraint. A local copy had drifted to 'bank',
+ * 'prepaid' and 'voucher' against the database's 'bank_transfer',
+ * 'prepaid_wallet' and 'gift_voucher', so choosing any of those three failed the
+ * check constraint at checkout.
+ *
+ * loyalty_points is excluded deliberately: points are redeemed through the
+ * Redeem Points field, which discounts the bill. Offering it as a payment row as
+ * well would count the same redemption twice.
+ */
+const PAYMENT_MODES = ALL_PAYMENT_MODES.filter(m => m.value !== 'loyalty_points')
 
 function computeLine(l: LineItem) {
   const gross         = l.unitPrice * l.qty

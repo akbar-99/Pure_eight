@@ -376,13 +376,32 @@ export async function getBillByNumber(billNumber: string): Promise<{
   } | null
 }
 
+/**
+ * Voids a bill and undoes what it did.
+ *
+ * Marking the status alone left the sale's side effects in place: the customer
+ * kept the loyalty points it awarded, and any product sold stayed deducted from
+ * stock. Both are reversed here so a voided sale leaves no trace in balances or
+ * inventory, while the bill row itself survives for the audit trail.
+ */
 export async function cancelBill(
   billId: string,
   reason: string,
 ): Promise<{ error?: string }> {
   // Redirects to sign-in when the session has lapsed.
-  await requireServerContext()
+  const ctx = await requireServerContext()
   const supabase = createAdminClient()
+
+  // Voiding twice would reverse the same points and stock a second time.
+  const { data: bill } = await supabase
+    .from('bills')
+    .select('id, status, outlet_id, customer_id, bill_number')
+    .eq('id', billId)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (!bill) return { error: 'Bill not found.' }
+  if (bill.status === 'void') return { error: 'That bill is already void.' }
 
   const { error } = await supabase
     .from('bills')
@@ -395,8 +414,91 @@ export async function cancelBill(
     .is('deleted_at', null)
 
   if (error) return { error: error.message }
+
+  // ── Reverse loyalty ────────────────────────────────────────────────────────
+  // Sum the bill's transactions rather than recomputing from the total: earning
+  // and redemption may both have happened, and the ledger is what actually moved.
+  const { data: txns } = await supabase
+    .from('loyalty_txns')
+    .select('points')
+    .eq('bill_id', billId)
+
+  const netPoints = ((txns ?? []) as { points: number }[])
+    .reduce((sum, t) => sum + t.points, 0)
+
+  if (bill.customer_id && netPoints !== 0) {
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', bill.customer_id)
+      .single()
+
+    const balance = Math.max(0, (cust?.loyalty_points ?? 0) - netPoints)
+
+    await supabase
+      .from('customers')
+      .update({ loyalty_points: balance, updated_at: new Date().toISOString() })
+      .eq('id', bill.customer_id)
+
+    await supabase.from('loyalty_txns').insert({
+      customer_id:   bill.customer_id,
+      brand_id:      ctx.tenantId,
+      bill_id:       billId,
+      type:          netPoints > 0 ? 'redeem' : 'earn',
+      points:        -netPoints,
+      balance_after: balance,
+      notes:         `Reversed on void of ${bill.bill_number}`,
+    })
+  }
+
+  // ── Restore stock ──────────────────────────────────────────────────────────
+  // Products only. Service lines never moved stock, so they have nothing to undo.
+  const { data: lines } = await supabase
+    .from('bill_lines')
+    .select('item_id, item_name, qty, item_type')
+    .eq('bill_id', billId)
+    .eq('item_type', 'product')
+
+  for (const line of (lines ?? []) as { item_id: string | null; qty: number; item_name: string }[]) {
+    if (!line.item_id || !bill.outlet_id) continue
+
+    const { data: level } = await supabase
+      .from('stock_levels')
+      .select('id, quantity')
+      .eq('item_id', line.item_id)
+      .eq('outlet_id', bill.outlet_id)
+      .maybeSingle()
+
+    const restored = ((level as { quantity: number } | null)?.quantity ?? 0) + line.qty
+
+    if (level) {
+      await supabase
+        .from('stock_levels')
+        .update({ quantity: restored, updated_at: new Date().toISOString() })
+        .eq('id', (level as { id: string }).id)
+    } else {
+      await supabase
+        .from('stock_levels')
+        .insert({ item_id: line.item_id, outlet_id: bill.outlet_id, quantity: restored })
+    }
+
+    // 'adjustment' rather than 'consumption': stock is coming back in, and the
+    // type check constraint has no value for a sale reversal.
+    await supabase.from('stock_movements').insert({
+      item_id:        line.item_id,
+      outlet_id:      bill.outlet_id,
+      type:           'adjustment',
+      quantity:       line.qty,
+      reference_type: 'bill',
+      reference_id:   billId,
+      created_by:     ctx.userId,
+      notes:          `Returned to stock on void of ${bill.bill_number}`,
+    })
+  }
+
   revalidatePath('/dashboard/pos')
   revalidatePath('/dashboard/overview')
+  revalidatePath('/dashboard/bills')
   return {}
 }
 

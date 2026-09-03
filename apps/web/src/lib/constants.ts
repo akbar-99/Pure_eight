@@ -59,6 +59,7 @@ export const NAV_ITEMS = [
   { href: "/dashboard/overview",      label: "Dashboard",       icon: "LayoutDashboard" },
   { href: "/dashboard/trends",        label: "Business Trends", icon: "TrendingUp"      },
   { href: "/dashboard/pos",           label: "Quick Sale",      icon: "ShoppingCart"    },
+  { href: "/dashboard/bills",         label: "Bills",           icon: "Receipt"         },
   { href: "/dashboard/appointments",  label: "Appointments",    icon: "Calendar"        },
   { href: "/dashboard/customers",     label: "Customers",       icon: "Users"           },
   { href: "/dashboard/campaigns",     label: "Campaigns",       icon: "Megaphone"       },

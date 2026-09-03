@@ -8,7 +8,7 @@ import {
   BarChart2, Settings, Building2, ClipboardCheck, BookOpen,
   FileText, Truck, DollarSign, ChevronLeft, ChevronRight,
   ThumbsUp, MessageSquare, Sparkles, Tag, MapPin,
-  Smartphone, TabletSmartphone, WifiOff, Fingerprint,
+  Smartphone, TabletSmartphone, WifiOff, Fingerprint, Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, HQ_ONLY_NAV_ITEMS } from "@/lib/constants";
@@ -20,7 +20,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Megaphone, Star, Globe, UserPlus, Package, UserCheck, Gift,
   BarChart2, Settings, Building2, ClipboardCheck, BookOpen,
   FileText, Truck, DollarSign, ThumbsUp, MessageSquare, Sparkles,
-  Tag, MapPin, Smartphone, TabletSmartphone, WifiOff, Fingerprint,
+  Tag, MapPin, Smartphone, TabletSmartphone, WifiOff, Fingerprint, Receipt,
 };
 
 interface SidebarProps {

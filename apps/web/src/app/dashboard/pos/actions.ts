@@ -179,7 +179,11 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
       await supabase.from('stock_movements').insert({
         item_id:        itemId,
         outlet_id:      outletId,
-        type:           'sale',
+        // stock_movements_type_check permits grn, wastage, adjustment,
+        // cycle_count and consumption only — 'sale' is rejected. A retail sale
+        // is stock consumed, and reference_type 'bill' distinguishes it from
+        // stock used up during a service, so no information is lost.
+        type:           'consumption',
         quantity:       -line.qty,
         reference_type: 'bill',
         reference_id:   bill.id,

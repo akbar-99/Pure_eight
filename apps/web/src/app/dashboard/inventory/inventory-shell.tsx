@@ -148,9 +148,10 @@ function ItemModal({
                   className="mt-0.5 h-4 w-4 accent-black"
                 />
                 <span>
-                  <span className="block text-sm font-medium text-charcoal">Sell this in the shop</span>
+                  <span className="block text-sm font-medium text-charcoal">Also sell this to customers</span>
                   <span className="block text-xs text-grey">
-                    Adds it to Quick Sale. Leave off for stock only used during services.
+                    Shows it in Quick Sale at the selling price below. Every item can still be
+                    used in the salon — record that with Adjust Stock → Used in salon.
                   </span>
                 </span>
               </label>
@@ -207,14 +208,15 @@ function ItemModal({
 
 function AdjustModal({ item, onClose }: { item: InventoryItemWithStock; onClose: () => void }) {
   const [qty, setQty]   = useState('')
-  const [type, setType] = useState<'grn' | 'wastage' | 'adjustment' | 'cycle_count'>('grn')
+  const [type, setType] = useState<'grn' | 'consumption' | 'wastage' | 'adjustment' | 'cycle_count'>('grn')
   const [notes, setNotes] = useState('')
   const [isPending, startTransition] = useTransition()
 
   function submit() {
     const q = parseFloat(qty)
     if (isNaN(q) || q <= 0) { toast.error('Enter valid quantity'); return }
-    const delta = type === 'wastage' ? -q : q
+    // Salon use and wastage take stock out; everything else adds or sets it.
+    const delta = type === 'wastage' || type === 'consumption' ? -q : q
     startTransition(async () => {
       const res = await adjustStock(item.id, delta, type, notes || undefined)
       if (res.error) toast.error(res.error)
@@ -235,11 +237,19 @@ function AdjustModal({ item, onClose }: { item: InventoryItemWithStock; onClose:
             <label className="text-xs font-medium text-charcoal block mb-1">Type</label>
             <select value={type} onChange={e => setType(e.target.value as typeof type)}
               className="w-full text-sm border border-silver rounded-[6px] px-3 py-2 focus:outline-none focus:border-black bg-white">
-              <option value="grn">Goods Received (GRN)</option>
-              <option value="wastage">Wastage / Loss</option>
-              <option value="adjustment">Manual Adjustment</option>
-              <option value="cycle_count">Set Count (Cycle Count)</option>
+              <option value="grn">Stock received (+)</option>
+              <option value="consumption">Used in salon (−)</option>
+              <option value="wastage">Wastage / damaged (−)</option>
+              <option value="adjustment">Manual add (+)</option>
+              <option value="cycle_count">Set exact count</option>
             </select>
+            <p className="text-[11px] text-grey mt-1">
+              {type === 'consumption' && 'For product taken off the shelf to use on clients. Sales at the till are deducted automatically.'}
+              {type === 'grn'         && 'For a delivery or restock arriving at this outlet.'}
+              {type === 'wastage'     && 'For product that is damaged, expired or lost.'}
+              {type === 'adjustment'  && 'Adds to stock. Use "Set exact count" to correct a figure down.'}
+              {type === 'cycle_count' && 'Replaces the figure with what is physically on the shelf.'}
+            </p>
           </div>
           <div>
             <label className="text-xs font-medium text-charcoal block mb-1">
@@ -495,7 +505,14 @@ export function InventoryShell({ initial }: Props) {
                   <tbody>
                     {filtered.map(item => (
                       <tr key={item.id} className="border-b border-pearl last:border-0 hover:bg-offwhite">
-                        <td className="px-4 py-3 font-medium text-charcoal">{item.name}</td>
+                        <td className="px-4 py-3 font-medium text-charcoal">
+                          {item.name}
+                          {item.is_retail && (
+                            <span className="ml-2 inline-flex items-center rounded-full bg-black px-1.5 py-0.5 text-[10px] font-medium text-white align-middle">
+                              For sale
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-mono text-grey">{item.sku ?? '—'}</td>
                         <td className="px-4 py-3 text-grey">{item.category}</td>
                         <td className="px-4 py-3 text-grey">{item.unit}</td>

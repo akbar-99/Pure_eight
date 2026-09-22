@@ -246,7 +246,9 @@ export async function deleteInventoryItem(id: string): Promise<{ error?: string 
 export async function adjustStock(
   itemId: string,
   quantity: number,
-  type: 'grn' | 'wastage' | 'adjustment' | 'cycle_count',
+  // 'consumption' records stock taken for use in the salon. Selling a product
+  // uses the same movement type, told apart by reference_type 'bill'.
+  type: 'grn' | 'wastage' | 'adjustment' | 'cycle_count' | 'consumption',
   notes?: string
 ): Promise<{ error?: string }> {
   const ctx = await getServerContext()

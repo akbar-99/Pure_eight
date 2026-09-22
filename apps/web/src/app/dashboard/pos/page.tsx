@@ -17,6 +17,7 @@ import { ReceiptModal, type ReceiptData } from './receipt-modal'
 import { CancelBillModal } from './cancel-bill-modal'
 import { AddCustomerModal } from '@/app/dashboard/customers/add-customer-modal'
 import { toast }           from 'sonner'
+import Link                from 'next/link'
 
 type Service  = { id: string; name: string; category: string; price: number; duration_mins: number; tax_rate: number }
 type StaffRow = { id: string; full_name: string; role_title: string | null }
@@ -73,6 +74,7 @@ export default function POSPage() {
   const [addingCustomer, setAddingCustomer] = useState(false)
   const [serviceSearch, setServiceSearch] = useState('')
   const [products,      setProducts]      = useState<RetailProduct[]>([])
+  const [productsLoaded, setProductsLoaded] = useState(false)
   const [productSearch, setProductSearch] = useState('')
   const [lines,         setLines]         = useState<LineItem[]>([])
   const [notes,         setNotes]         = useState('')
@@ -97,7 +99,7 @@ export default function POSPage() {
   useEffect(() => {
     getServices().then(setServices)
     getStaff().then(setStaff)
-    getProducts().then(setProducts)
+    getProducts().then(p => { setProducts(p); setProductsLoaded(true) })
   }, [])
 
   // Debounced customer lookup. Clearing on a too-short query happens in the input's
@@ -432,11 +434,29 @@ export default function POSPage() {
             </CardContent>
           </Card>
 
-          {/* Products grid — retail items drawn from Inventory */}
-          {products.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle>Add Products</CardTitle></CardHeader>
-              <CardContent>
+          {/* Products grid — retail items drawn from Inventory. Always shown: hiding
+              it when empty meant nobody could tell products were sellable at all. */}
+          <Card>
+            <CardHeader><CardTitle>Add Products</CardTitle></CardHeader>
+            <CardContent>
+              {!productsLoaded ? (
+                <p className="text-sm text-grey text-center py-6">Loading products…</p>
+              ) : products.length === 0 ? (
+                <div className="text-center py-6 px-4">
+                  <p className="text-sm font-medium text-charcoal">No products are set up for sale yet</p>
+                  <p className="text-xs text-grey mt-1 max-w-md mx-auto">
+                    In Inventory, edit a product, tick <span className="text-charcoal">Also sell this to customers</span> and
+                    give it a selling price. It will appear here straight away.
+                  </p>
+                  <Link
+                    href="/dashboard/inventory"
+                    className="inline-flex items-center gap-1.5 mt-3 text-xs font-medium text-black underline underline-offset-2"
+                  >
+                    Go to Inventory
+                  </Link>
+                </div>
+              ) : (
+                <>
                 <Input
                   placeholder="Search products…"
                   prefix={<Search className="h-3.5 w-3.5" />}
@@ -471,9 +491,10 @@ export default function POSPage() {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          )}
+                </>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Bill line items */}
           {lines.length > 0 && (

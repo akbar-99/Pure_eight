@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { istNow } from '@/lib/utils'
 import { getServerContext } from '@/lib/context/server'
 import { revalidatePath } from 'next/cache'
+import { depreciationBetween, type DepreciableAsset } from '@/lib/assets/depreciation'
 
 export type PaymentBreakdown = { mode: string; amount_paise: number; count: number }
 
@@ -24,6 +25,8 @@ export type FinancePageData = {
   expenses_paise: number
   cogs_paise: number
   opex_paise: number
+  /** Non-cash charge from the asset register for this period. */
+  depreciation_paise: number
   gross_profit_paise: number
   operating_profit_paise: number
   operating_margin_pct: number
@@ -39,7 +42,7 @@ export type FinancePageData = {
 export async function getFinancePageData(from: string, to: string): Promise<FinancePageData> {
   const ctx = await getServerContext()
   if (!ctx) throw new Error('Not authenticated')
-  const { outletId, isHqUser } = ctx
+  const { outletId, isHqUser, tenantId } = ctx
   const admin = createAdminClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any
@@ -81,8 +84,23 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
     .reduce((s, e) => s + (e.amount_paise ?? 0), 0)
   const expenses_paise = expenses.reduce((s, e) => s + (e.amount_paise ?? 0), 0)
   const opex_paise = expenses_paise - cogs_paise
+
+  // Depreciation is a real operating cost that never appears as an expense row,
+  // because no money moves. Taken from the asset register so the profit figure
+  // reflects equipment wearing out, not just cash spent.
+  const { data: depAssets } = await admin
+    .from('assets')
+    .select('purchase_date, purchase_cost, salvage_value, useful_life_months, disposed_on, outlet_id, brand_id')
+    .is('deleted_at', null)
+    .eq('brand_id', tenantId)
+  type ScopedAsset = DepreciableAsset & { outlet_id: string | null }
+  const depreciation_paise = ((depAssets ?? []) as unknown as ScopedAsset[])
+    // An outlet carries its own equipment plus anything held centrally.
+    .filter(a => !outletId || a.outlet_id === outletId || a.outlet_id === null)
+    .reduce((sum, a) => sum + depreciationBetween(a, from, to), 0)
+
   const gross_profit_paise = revenue_paise - cogs_paise
-  const operating_profit_paise = gross_profit_paise - opex_paise
+  const operating_profit_paise = gross_profit_paise - opex_paise - depreciation_paise
   const operating_margin_pct = revenue_paise > 0
     ? Math.round((operating_profit_paise / revenue_paise) * 100)
     : 0
@@ -115,6 +133,7 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
     expenses_paise,
     cogs_paise,
     opex_paise,
+    depreciation_paise,
     gross_profit_paise,
     operating_profit_paise,
     operating_margin_pct,

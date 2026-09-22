@@ -76,6 +76,7 @@ export const NAV_ITEMS = [
   { href: "/dashboard/online-booking",label: "Online Booking",  icon: "Globe"           },
   { href: "/dashboard/leads",         label: "Leads",           icon: "UserPlus"        },
   { href: "/dashboard/inventory",     label: "Inventory",       icon: "Package"         },
+  { href: "/dashboard/assets",        label: "Assets",          icon: "Wrench"          },
   { href: "/dashboard/staff",         label: "Staff & HR",      icon: "UserCheck"       },
   { href: "/dashboard/staff-app",     label: "Staff App",       icon: "TabletSmartphone"},
   { href: "/dashboard/loyalty",       label: "Loyalty",         icon: "Gift"            },

@@ -210,7 +210,8 @@ export function FinanceShell({ initial }: { initial: FinancePageData }) {
     })
   }
 
-  const { revenue_paise, expenses_paise, gross_profit_paise, operating_profit_paise, operating_margin_pct } = data
+  const { revenue_paise, expenses_paise, gross_profit_paise, operating_profit_paise,
+          operating_margin_pct, depreciation_paise } = data
 
   return (
     <div>
@@ -245,7 +246,9 @@ export function FinanceShell({ initial }: { initial: FinancePageData }) {
         <KpiBlock label="Gross Profit" value={fmt(gross_profit_paise)}
           sub={revenue_paise > 0 ? `${Math.round((gross_profit_paise / revenue_paise) * 100)}% margin` : undefined} />
         <KpiBlock label="Operating Profit" value={fmt(operating_profit_paise)}
-          sub={`${operating_margin_pct}% margin`} />
+          sub={depreciation_paise > 0
+            ? `${operating_margin_pct}% margin · after ${fmt(depreciation_paise)} depreciation`
+            : `${operating_margin_pct}% margin`} />
       </div>
 
       {/* Two-column layout */}

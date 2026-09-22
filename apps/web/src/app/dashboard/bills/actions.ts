@@ -22,46 +22,86 @@ export type BillsFilter = {
   from?:   string
   to?:     string
   status?: 'all' | 'closed' | 'open' | 'void'
+  /** Zero-based. */
+  page?:   number
 }
 
 export type BillsPageData = {
   bills:      BillRow[]
-  totalCount: number
-  totalValue: number   // paise, excluding voided bills
+  totalCount: number       // bills matching the filter, across every page
+  totalValue: number       // paise, whole filtered set, excluding voided
+  page:       number
+  pageSize:   number
+  pageCount:  number
   isHqUser:   boolean
 }
 
-const PAGE_SIZE = 100
+export const BILLS_PAGE_SIZE = 50
 
 /**
- * Bills for the current scope. There was previously no way to see a bill without
- * already knowing its number, which is why voiding one meant guessing.
+ * One page of bills for the current scope.
+ *
+ * Counts and totals cover the whole filtered set rather than the page, so the
+ * summary line does not change as you page through. The filter is applied in
+ * the database: matching in memory would only ever search the page in hand,
+ * which silently hid older bills.
  */
 export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData> {
+  const page = Math.max(0, filter.page ?? 0)
+  const empty: BillsPageData = {
+    bills: [], totalCount: 0, totalValue: 0,
+    page, pageSize: BILLS_PAGE_SIZE, pageCount: 0, isHqUser: false,
+  }
+
   const ctx = await getServerContext()
-  if (!ctx) return { bills: [], totalCount: 0, totalValue: 0, isHqUser: false }
+  if (!ctx) return empty
 
   const admin = createAdminClient()
 
-  let q = admin
-    .from('bills')
-    .select(
-      'id, bill_number, created_at, total, status, outlet_id,' +
-      'customers(full_name, mobile), outlets(name), bill_lines(id)',
-      { count: 'exact' },
+  // A customer's name and mobile live on another table, so resolve the search to
+  // customer ids first and match bills on either their number or that set.
+  let customerIds: string[] = []
+  const term = filter.search?.trim()
+  if (term) {
+    const { data: matches } = await admin
+      .from('customers')
+      .select('id')
+      .eq('brand_id', ctx.tenantId)
+      .or(`full_name.ilike.%${term}%,mobile.ilike.%${term}%`)
+      .limit(500)
+    customerIds = ((matches ?? []) as { id: string }[]).map(c => c.id)
+  }
+
+  /** Every filter except the column selection, so count and page always agree. */
+  const scoped = <T>(q: T): T => {
+    let b = q as unknown as ReturnType<typeof admin.from>
+    b = b.is('deleted_at', null)
+    if (ctx.outletId) b = b.eq('outlet_id', ctx.outletId)
+    if (filter.status && filter.status !== 'all') b = b.eq('status', filter.status)
+    if (filter.from) b = b.gte('created_at', `${filter.from}T00:00:00+05:30`)
+    if (filter.to)   b = b.lte('created_at', `${filter.to}T23:59:59.999+05:30`)
+    if (term) {
+      const clauses = [`bill_number.ilike.%${term}%`]
+      if (customerIds.length > 0) clauses.push(`customer_id.in.(${customerIds.join(',')})`)
+      b = b.or(clauses.join(','))
+    }
+    return b as unknown as T
+  }
+
+  const from = page * BILLS_PAGE_SIZE
+
+  const [pageRes, totalsRes] = await Promise.all([
+    scoped(
+      admin
+        .from('bills')
+        .select('id, bill_number, created_at, total, status, customers(full_name, mobile), outlets(name), bill_lines(id)')
     )
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(PAGE_SIZE)
-
-  // HQ sees the whole network; an outlet user sees only their own till.
-  if (ctx.outletId) q = q.eq('outlet_id', ctx.outletId)
-
-  if (filter.status && filter.status !== 'all') q = q.eq('status', filter.status)
-  if (filter.from) q = q.gte('created_at', `${filter.from}T00:00:00+05:30`)
-  if (filter.to)   q = q.lte('created_at', `${filter.to}T23:59:59.999+05:30`)
-
-  const { data, count } = await q
+      .order('created_at', { ascending: false })
+      .range(from, from + BILLS_PAGE_SIZE - 1),
+    // Light second pass for the figures across every match. Two small columns,
+    // no joins — cheap at these volumes, and it keeps the summary stable while paging.
+    scoped(admin.from('bills').select('total, status')),
+  ])
 
   type Joined = {
     id: string; bill_number: string; created_at: string; total: number; status: string
@@ -70,7 +110,7 @@ export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData>
     bill_lines: { id: string }[] | null
   }
 
-  let rows: BillRow[] = ((data ?? []) as unknown as Joined[]).map(b => ({
+  const rows: BillRow[] = ((pageRes.data ?? []) as unknown as Joined[]).map(b => ({
     id:              b.id,
     bill_number:     b.bill_number,
     created_at:      b.created_at,
@@ -82,22 +122,16 @@ export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData>
     item_count:      b.bill_lines?.length ?? 0,
   }))
 
-  // Searching across a joined customer name is awkward in PostgREST, and the page
-  // is capped at PAGE_SIZE anyway, so match in memory over the fetched window.
-  const term = filter.search?.trim().toLowerCase()
-  if (term) {
-    rows = rows.filter(r =>
-      r.bill_number.toLowerCase().includes(term) ||
-      (r.customer_name ?? '').toLowerCase().includes(term) ||
-      (r.customer_mobile ?? '').includes(term)
-    )
-  }
+  const all = (totalsRes.data ?? []) as { total: number; status: string }[]
 
   return {
     bills:      rows,
-    totalCount: count ?? rows.length,
+    totalCount: all.length,
     // Voided bills are not revenue, so they are excluded from the value shown.
-    totalValue: rows.filter(r => r.status !== 'void').reduce((s, r) => s + r.total, 0),
+    totalValue: all.filter(b => b.status !== 'void').reduce((s, b) => s + b.total, 0),
+    page,
+    pageSize:   BILLS_PAGE_SIZE,
+    pageCount:  Math.max(1, Math.ceil(all.length / BILLS_PAGE_SIZE)),
     isHqUser:   ctx.isHqUser,
   }
 }

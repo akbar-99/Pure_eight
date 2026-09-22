@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/empty-state'
 import { fmtCurrency } from '@/lib/utils'
-import { Search, Receipt, Ban, X } from 'lucide-react'
+import { Search, Receipt, Ban, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getBills, type BillsPageData, type BillRow } from './actions'
 import { cancelBill } from '@/app/dashboard/pos/actions'
 
@@ -89,8 +89,9 @@ export function BillsShell({ initial }: { initial: BillsPageData }) {
   const [voiding, setVoiding] = useState<BillRow | null>(null)
   const [pending, startTransition] = useTransition()
 
-  function reload(next?: Partial<{ search: string; status: typeof status; from: string; to: string }>) {
-    const f = { search, status, from, to, ...next }
+  /** Any filter change resets to the first page; paging keeps the filters. */
+  function reload(next?: Partial<{ search: string; status: typeof status; from: string; to: string; page: number }>) {
+    const f = { search, status, from, to, page: 0, ...next }
     startTransition(async () => setData(await getBills(f)))
   }
 
@@ -135,10 +136,22 @@ export function BillsShell({ initial }: { initial: BillsPageData }) {
 
       {/* Totals */}
       <div className="flex items-center gap-6 mb-4 text-xs text-grey">
-        <span><span className="font-semibold text-charcoal">{data.bills.length}</span> shown</span>
+        <span>
+          {data.totalCount > 0 ? (
+            <>
+              <span className="font-semibold text-charcoal">
+                {(data.page * data.pageSize + 1).toLocaleString('en-IN')}–
+                {(data.page * data.pageSize + data.bills.length).toLocaleString('en-IN')}
+              </span>
+              {' of '}
+              <span className="font-semibold text-charcoal">{data.totalCount.toLocaleString('en-IN')}</span>
+              {' bills'}
+            </>
+          ) : '0 bills'}
+        </span>
         <span>
           <span className="font-semibold text-charcoal">{fmtCurrency(data.totalValue)}</span> value
-          <span className="text-silver"> · excludes voided</span>
+          <span className="text-silver"> · whole result, excludes voided</span>
         </span>
       </div>
 
@@ -194,8 +207,28 @@ export function BillsShell({ initial }: { initial: BillsPageData }) {
         </div>
       )}
 
+      {data.pageCount > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-grey">
+            Page <span className="font-semibold text-charcoal">{data.page + 1}</span> of {data.pageCount.toLocaleString('en-IN')}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" disabled={data.page === 0 || pending}
+              onClick={() => reload({ page: data.page - 1 })}>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Newer
+            </Button>
+            <Button variant="secondary" size="sm" disabled={data.page + 1 >= data.pageCount || pending}
+              onClick={() => reload({ page: data.page + 1 })}>
+              Older
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {voiding && (
-        <VoidModal bill={voiding} onClose={() => setVoiding(null)} onDone={() => reload()} />
+        <VoidModal bill={voiding} onClose={() => setVoiding(null)} onDone={() => reload({ page: data.page })} />
       )}
     </div>
   )

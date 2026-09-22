@@ -534,13 +534,18 @@ export function InventoryShell({ initial }: Props) {
                         <td className="px-4 py-3 text-grey">{item.reorder_level} {item.unit}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
+                            {/* Stock changes are the most frequent action here, so they get a
+                                labelled button rather than an icon to decode. The pencil used to
+                                open this and the box opened Edit — the reverse of convention. */}
                             <button onClick={() => { setAdjusting(item); setModal('adjust') }}
-                              className="text-grey hover:text-charcoal" title="Adjust stock">
-                              <Edit2 className="h-3.5 w-3.5" />
+                              className="inline-flex items-center gap-1 h-7 px-2 rounded-[4px] border border-silver text-[11px] font-medium text-charcoal hover:border-black hover:bg-offwhite transition-colors"
+                              title="Add, use or correct stock">
+                              <Package className="h-3 w-3" />
+                              Stock
                             </button>
                             <button onClick={() => { setEditing(item); setModal('edit') }}
                               className="text-grey hover:text-charcoal" title="Edit item">
-                              <Package className="h-3.5 w-3.5" />
+                              <Edit2 className="h-3.5 w-3.5" />
                             </button>
                             <button onClick={() => doDelete(item)} className="text-grey hover:text-danger" title="Delete">
                               <Trash2 className="h-3.5 w-3.5" />

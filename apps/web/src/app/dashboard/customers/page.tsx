@@ -1,9 +1,11 @@
 import { PageHeader }       from '@/components/shared/page-header'
 import { Button }            from '@/components/ui/button'
-import { Download, UserPlus } from 'lucide-react'
+import { UserPlus } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { AddCustomerModal }  from './add-customer-modal'
 import { CustomersShell }    from './customers-shell'
+import { ExportMenu }        from './export-menu'
+import { getLetterhead }     from '@/lib/export/letterhead'
 import { getServerContext }  from '@/lib/context/server'
 import { redirect }          from 'next/navigation'
 
@@ -34,7 +36,10 @@ export default async function CustomersPage() {
   const ctx = await getServerContext()
   if (!ctx) redirect('/auth/login')
 
-  const data = await getCustomers(ctx.tenantId)
+  const [data, letterhead] = await Promise.all([
+    getCustomers(ctx.tenantId),
+    getLetterhead(),
+  ])
 
   return (
     <div>
@@ -43,10 +48,7 @@ export default async function CustomersPage() {
         subtitle={`${data.all.length.toLocaleString('en-IN')} total`}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm">
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Export
-            </Button>
+            <ExportMenu customers={data.all} letterhead={letterhead} />
             <AddCustomerModal
               trigger={
                 <Button size="sm">

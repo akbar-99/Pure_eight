@@ -36,7 +36,9 @@ export type BillsPageData = {
   isHqUser:   boolean
 }
 
-export const BILLS_PAGE_SIZE = 50
+// Not exported: a 'use server' module may only export async functions, and the
+// page size reaches the client on the payload as pageSize.
+const BILLS_PAGE_SIZE = 50
 
 /**
  * One page of bills for the current scope.

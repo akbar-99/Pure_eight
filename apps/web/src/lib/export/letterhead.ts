@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getServerContext } from '@/lib/context/server'
+import { BRAND_NAME } from '@/lib/constants'
 
 /** Business identity printed at the top of every exported document. */
 export type Letterhead = {
@@ -11,7 +12,7 @@ export type Letterhead = {
 }
 
 const FALLBACK: Letterhead = {
-  brandName: 'Pure Eight', outletName: null, address: null, phone: null, email: null,
+  brandName: BRAND_NAME, outletName: null, address: null, phone: null, email: null,
 }
 
 /**
@@ -27,16 +28,13 @@ export async function getLetterhead(): Promise<Letterhead> {
 
   const admin = createAdminClient()
 
-  const [tenantRes, outletRes] = await Promise.all([
-    admin.from('tenants').select('name').eq('id', ctx.tenantId).maybeSingle(),
-    ctx.outletId
-      ? admin
-          .from('outlets')
-          .select('name, address, city, state, pincode, phone, email')
-          .eq('id', ctx.outletId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
+  const outletRes = ctx.outletId
+    ? await admin
+        .from('outlets')
+        .select('name, address, city, state, pincode, phone, email')
+        .eq('id', ctx.outletId)
+        .maybeSingle()
+    : { data: null }
 
   const o = outletRes.data as {
     name: string; address: string | null; city: string | null
@@ -44,7 +42,10 @@ export async function getLetterhead(): Promise<Letterhead> {
   } | null
 
   return {
-    brandName:  tenantRes.data?.name ?? FALLBACK.brandName,
+    // Always the brand. The tenant name is an internal label ("Pure Eight
+    // Franchisee", "Pure Eight HQ") and printed as a company name it is wrong for
+    // every tenant. Where the document came from is the branch line's job.
+    brandName:  BRAND_NAME,
     outletName: o?.name ?? null,
     // Join only the parts that exist, so a half-filled address never prints stray commas.
     address:    o ? [o.address, o.city, o.state, o.pincode].filter(Boolean).join(', ') || null : null,

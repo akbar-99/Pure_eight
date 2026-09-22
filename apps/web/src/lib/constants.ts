@@ -1,3 +1,9 @@
+/**
+ * The customer-facing brand. Not a tenant name: tenants carry internal labels
+ * such as "Pure Eight HQ" or "Pure Eight Franchisee" that must never reach print.
+ */
+export const BRAND_NAME = "Pure Eight";
+
 export const ROLES = {
   FRANCHISOR_ADMIN: "franchisor_admin",
   HQ_MANAGER: "hq_manager",

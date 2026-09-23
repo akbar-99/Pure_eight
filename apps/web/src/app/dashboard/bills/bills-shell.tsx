@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/empty-state'
-import { fmtCurrency } from '@/lib/utils'
-import { Search, Receipt, Ban, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { fmtCurrency, istToday } from '@/lib/utils'
+import { Search, Receipt, Ban, X, ChevronLeft, ChevronRight, Pencil, History } from 'lucide-react'
+import { AmendBillModal } from './amend-bill-modal'
+import { BillHistoryModal } from './bill-history-modal'
 import { getBills, getBillsForExport, type BillsPageData, type BillRow } from './actions'
 import { cancelBill } from '@/app/dashboard/pos/actions'
 import { ExportMenu } from '@/components/shared/export-menu'
@@ -24,6 +26,14 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default
 function fmtDay(ymd: string) {
   const [y, m, d] = ymd.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/**
+ * Mirrors the server's amendment window so the button is not offered for a bill
+ * the server would refuse. The server re-checks it: this is only the affordance.
+ */
+function amendable(b: BillRow) {
+  return b.status !== 'void' && istToday(new Date(b.created_at)) === istToday()
 }
 
 function fmtWhen(iso: string) {
@@ -96,6 +106,8 @@ export function BillsShell({ initial, letterhead }: { initial: BillsPageData; le
   const [from, setFrom]       = useState('')
   const [to, setTo]           = useState('')
   const [voiding, setVoiding] = useState<BillRow | null>(null)
+  const [amending, setAmending] = useState<BillRow | null>(null)
+  const [history, setHistory]   = useState<BillRow | null>(null)
   const [pending, startTransition] = useTransition()
 
   /** Any filter change resets to the first page; paging keeps the filters. */
@@ -226,16 +238,40 @@ export function BillsShell({ initial, letterhead }: { initial: BillsPageData; le
                   <td className="px-4 py-3 text-xs text-steel">{b.item_count}</td>
                   <td className="px-4 py-3 font-mono text-charcoal">{fmtCurrency(b.total)}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[b.status] ?? 'default'} className="capitalize">{b.status}</Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={STATUS_VARIANT[b.status] ?? 'default'} className="capitalize">{b.status}</Badge>
+                      {b.amend_count > 0 && (
+                        <button
+                          onClick={() => setHistory(b)}
+                          title="See what was changed"
+                          className="text-[10px] font-medium text-warning border border-warning/40 bg-warning/10 rounded-[3px] px-1.5 py-0.5 hover:bg-warning/20 transition-colors"
+                        >
+                          Edited{b.amend_count > 1 ? ` ×${b.amend_count}` : ''}
+                        </button>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
                     {b.status === 'void' ? (
                       <span className="text-[11px] text-grey pr-2">Voided</span>
                     ) : (
-                      <Button variant="ghost" size="sm" onClick={() => setVoiding(b)}>
-                        <Ban className="h-3.5 w-3.5" />
-                        Void
-                      </Button>
+                      <>
+                        {amendable(b) && (
+                          <Button variant="ghost" size="sm" onClick={() => setAmending(b)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </Button>
+                        )}
+                        {b.amend_count > 0 && (
+                          <Button variant="ghost" size="sm" onClick={() => setHistory(b)} aria-label="History">
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => setVoiding(b)}>
+                          <Ban className="h-3.5 w-3.5" />
+                          Void
+                        </Button>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -267,6 +303,22 @@ export function BillsShell({ initial, letterhead }: { initial: BillsPageData; le
 
       {voiding && (
         <VoidModal bill={voiding} onClose={() => setVoiding(null)} onDone={() => reload({ page: data.page })} />
+      )}
+
+      {amending && (
+        <AmendBillModal
+          billId={amending.id}
+          onClose={() => setAmending(null)}
+          onDone={() => reload({ page: data.page })}
+        />
+      )}
+
+      {history && (
+        <BillHistoryModal
+          billId={history.id}
+          billNumber={history.bill_number}
+          onClose={() => setHistory(null)}
+        />
       )}
     </div>
   )

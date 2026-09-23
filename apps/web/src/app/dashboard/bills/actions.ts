@@ -13,6 +13,8 @@ export type BillRow = {
   customer_mobile: string | null
   outlet_name:   string | null
   item_count:    number
+  /** Times this bill has been amended since it was closed. */
+  amend_count:   number
 }
 
 export type BillsFilter = {
@@ -65,7 +67,33 @@ type Joined = {
   bill_lines: { id: string }[] | null
 }
 
-function toRows(data: unknown): BillRow[] {
+/**
+ * How many times each of these bills has been amended.
+ *
+ * Read from the audit trail rather than a counter on the bill, so the badge can
+ * never disagree with the history behind it.
+ */
+async function amendCounts(
+  admin: ReturnType<typeof createAdminClient>,
+  billIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (billIds.length === 0) return counts
+
+  const { data } = await admin
+    .from('audit_log')
+    .select('entity_id')
+    .eq('entity_type', 'bill')
+    .eq('action', 'amend_bill')
+    .in('entity_id', billIds)
+
+  for (const row of (data ?? []) as { entity_id: string }[]) {
+    counts.set(row.entity_id, (counts.get(row.entity_id) ?? 0) + 1)
+  }
+  return counts
+}
+
+function toRows(data: unknown, amends?: Map<string, number>): BillRow[] {
   return ((data ?? []) as Joined[]).map(b => ({
     id:              b.id,
     bill_number:     b.bill_number,
@@ -76,6 +104,7 @@ function toRows(data: unknown): BillRow[] {
     customer_mobile: b.customers?.mobile ?? null,
     outlet_name:     b.outlets?.name ?? null,
     item_count:      b.bill_lines?.length ?? 0,
+    amend_count:     amends?.get(b.id) ?? 0,
   }))
 }
 
@@ -156,7 +185,8 @@ export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData>
     scoped(admin.from('bills').select('total, status')),
   ])
 
-  const rows = toRows(pageRes.data)
+  const ids = ((pageRes.data ?? []) as { id: string }[]).map(b => b.id)
+  const rows = toRows(pageRes.data, await amendCounts(admin, ids))
   const all = (totalsRes.data ?? []) as { total: number; status: string }[]
 
   return {

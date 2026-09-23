@@ -36,27 +36,60 @@ export type BillsPageData = {
   isHqUser:   boolean
 }
 
+export type BillsExportData = {
+  bills:      BillRow[]
+  /** True when the filter matched more bills than one document may hold. */
+  truncated:  boolean
+  /** HQ users see bills from every branch, so the document needs an outlet column. */
+  showOutlet: boolean
+}
+
 // Not exported: a 'use server' module may only export async functions, and the
 // page size reaches the client on the payload as pageSize.
 const BILLS_PAGE_SIZE = 50
 
-/**
- * One page of bills for the current scope.
- *
- * Counts and totals cover the whole filtered set rather than the page, so the
- * summary line does not change as you page through. The filter is applied in
- * the database: matching in memory would only ever search the page in hand,
- * which silently hid older bills.
- */
-export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData> {
-  const page = Math.max(0, filter.page ?? 0)
-  const empty: BillsPageData = {
-    bills: [], totalCount: 0, totalValue: 0,
-    page, pageSize: BILLS_PAGE_SIZE, pageCount: 0, isHqUser: false,
-  }
+// PostgREST caps a response at 1,000 rows, so a full export walks the result in
+// chunks of that size. The ceiling is a guard on the document rather than on the
+// data: past it the PDF stops being something anyone would open, and narrowing
+// the date range is the better answer.
+const EXPORT_CHUNK = 1000
+const EXPORT_MAX   = 10_000
 
+const SELECT_ROW =
+  'id, bill_number, created_at, total, status, customers(full_name, mobile), outlets(name), bill_lines(id)'
+
+type Joined = {
+  id: string; bill_number: string; created_at: string; total: number; status: string
+  customers: { full_name: string; mobile: string } | null
+  outlets:   { name: string } | null
+  bill_lines: { id: string }[] | null
+}
+
+function toRows(data: unknown): BillRow[] {
+  return ((data ?? []) as Joined[]).map(b => ({
+    id:              b.id,
+    bill_number:     b.bill_number,
+    created_at:      b.created_at,
+    total:           b.total,
+    status:          b.status,
+    customer_name:   b.customers?.full_name ?? null,
+    customer_mobile: b.customers?.mobile ?? null,
+    outlet_name:     b.outlets?.name ?? null,
+    item_count:      b.bill_lines?.length ?? 0,
+  }))
+}
+
+/**
+ * Resolves the signed-in scope and turns a filter into something that can be
+ * applied to any bills query.
+ *
+ * Shared so the table, its totals and the export all select the same set: an
+ * export that quietly used different rules than the list it came from would be
+ * wrong in a way nobody would notice until the figures were relied on.
+ */
+async function billsScope(filter: BillsFilter) {
   const ctx = await getServerContext()
-  if (!ctx) return empty
+  if (!ctx) return null
 
   const admin = createAdminClient()
 
@@ -90,14 +123,32 @@ export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData>
     return b as unknown as T
   }
 
+  return { admin, scoped, isHqUser: ctx.isHqUser }
+}
+
+/**
+ * One page of bills for the current scope.
+ *
+ * Counts and totals cover the whole filtered set rather than the page, so the
+ * summary line does not change as you page through. The filter is applied in
+ * the database: matching in memory would only ever search the page in hand,
+ * which silently hid older bills.
+ */
+export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData> {
+  const page = Math.max(0, filter.page ?? 0)
+  const empty: BillsPageData = {
+    bills: [], totalCount: 0, totalValue: 0,
+    page, pageSize: BILLS_PAGE_SIZE, pageCount: 0, isHqUser: false,
+  }
+
+  const scope = await billsScope(filter)
+  if (!scope) return empty
+  const { admin, scoped, isHqUser } = scope
+
   const from = page * BILLS_PAGE_SIZE
 
   const [pageRes, totalsRes] = await Promise.all([
-    scoped(
-      admin
-        .from('bills')
-        .select('id, bill_number, created_at, total, status, customers(full_name, mobile), outlets(name), bill_lines(id)')
-    )
+    scoped(admin.from('bills').select(SELECT_ROW))
       .order('created_at', { ascending: false })
       .range(from, from + BILLS_PAGE_SIZE - 1),
     // Light second pass for the figures across every match. Two small columns,
@@ -105,25 +156,7 @@ export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData>
     scoped(admin.from('bills').select('total, status')),
   ])
 
-  type Joined = {
-    id: string; bill_number: string; created_at: string; total: number; status: string
-    customers: { full_name: string; mobile: string } | null
-    outlets:   { name: string } | null
-    bill_lines: { id: string }[] | null
-  }
-
-  const rows: BillRow[] = ((pageRes.data ?? []) as unknown as Joined[]).map(b => ({
-    id:              b.id,
-    bill_number:     b.bill_number,
-    created_at:      b.created_at,
-    total:           b.total,
-    status:          b.status,
-    customer_name:   b.customers?.full_name ?? null,
-    customer_mobile: b.customers?.mobile ?? null,
-    outlet_name:     b.outlets?.name ?? null,
-    item_count:      b.bill_lines?.length ?? 0,
-  }))
-
+  const rows = toRows(pageRes.data)
   const all = (totalsRes.data ?? []) as { total: number; status: string }[]
 
   return {
@@ -134,6 +167,33 @@ export async function getBills(filter: BillsFilter = {}): Promise<BillsPageData>
     page,
     pageSize:   BILLS_PAGE_SIZE,
     pageCount:  Math.max(1, Math.ceil(all.length / BILLS_PAGE_SIZE)),
-    isHqUser:   ctx.isHqUser,
+    isHqUser,
   }
+}
+
+/**
+ * Every bill matching the filter, for an exported document.
+ *
+ * Deliberately not the page on screen: an export that stopped at fifty rows
+ * would look complete and quietly leave the rest out.
+ */
+export async function getBillsForExport(filter: BillsFilter = {}): Promise<BillsExportData> {
+  const scope = await billsScope(filter)
+  if (!scope) return { bills: [], truncated: false, showOutlet: false }
+  const { admin, scoped, isHqUser } = scope
+
+  const bills: BillRow[] = []
+  for (let from = 0; from < EXPORT_MAX; from += EXPORT_CHUNK) {
+    const { data } = await scoped(admin.from('bills').select(SELECT_ROW))
+      .order('created_at', { ascending: false })
+      .range(from, from + EXPORT_CHUNK - 1)
+
+    const chunk = toRows(data)
+    bills.push(...chunk)
+    if (chunk.length < EXPORT_CHUNK) {
+      return { bills, truncated: false, showOutlet: isHqUser }
+    }
+  }
+
+  return { bills, truncated: true, showOutlet: isHqUser }
 }

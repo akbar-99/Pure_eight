@@ -4,18 +4,30 @@ import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Download, FileText, Sheet, Loader2 } from 'lucide-react'
-import { exportCustomersPdf, exportCustomersXlsx, type ExportCustomer } from '@/lib/export/customers-export'
-import type { Letterhead } from '@/lib/export/letterhead'
 
+export type ExportKind = 'pdf' | 'xlsx'
+
+/**
+ * The Export button and its PDF / Excel menu.
+ *
+ * Purely the control: the caller owns what gets exported and how it is built,
+ * and returns how many rows were written so the toast reports the real figure
+ * rather than whatever happened to be on screen.
+ */
 export function ExportMenu({
-  customers,
-  letterhead,
+  noun,
+  count,
+  onExport,
 }: {
-  customers: ExportCustomer[]
-  letterhead: Letterhead
+  /** Plural, lower case — "bills", "customers". */
+  noun:     string
+  /** Shown in the menu header. Omit when the number is not known up front. */
+  count?:   number
+  /** Builds and downloads the file; resolves with the number of rows written. */
+  onExport: (kind: ExportKind) => Promise<number>
 }) {
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState<'pdf' | 'xlsx' | null>(null)
+  const [busy, setBusy] = useState<ExportKind | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -32,15 +44,15 @@ export function ExportMenu({
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
-  async function run(kind: 'pdf' | 'xlsx') {
-    if (customers.length === 0) { toast.error('No customers to export'); return }
+  async function run(kind: ExportKind) {
     setBusy(kind)
     setOpen(false)
     try {
-      // The libraries are imported on demand, so the first export pauses briefly.
-      if (kind === 'pdf') await exportCustomersPdf(customers, letterhead)
-      else                await exportCustomersXlsx(customers, letterhead)
-      toast.success(`Exported ${customers.length.toLocaleString('en-IN')} customers`)
+      // The PDF and spreadsheet libraries are imported on demand, so the first
+      // export of a session pauses briefly before the file appears.
+      const written = await onExport(kind)
+      if (written === 0) toast.error(`No ${noun} to export`)
+      else toast.success(`Exported ${written.toLocaleString('en-IN')} ${noun}`)
     } catch (err) {
       toast.error(`Export failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -73,7 +85,7 @@ export function ExportMenu({
           className="absolute right-0 top-full mt-2 w-60 bg-white border border-silver rounded-[8px] shadow-[0_8px_24px_rgba(0,0,0,0.10)] py-1.5 z-50"
         >
           <p className="px-3 pt-1 pb-2 text-[10px] font-semibold tracking-widest text-grey uppercase border-b border-pearl mb-1">
-            Export {customers.length.toLocaleString('en-IN')} customers
+            {count === undefined ? `Export ${noun}` : `Export ${count.toLocaleString('en-IN')} ${noun}`}
           </p>
           {items.map(({ kind, icon: Icon, label, hint }) => (
             <button

@@ -4,7 +4,7 @@ import { UserPlus } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { AddCustomerModal }  from './add-customer-modal'
 import { CustomersShell }    from './customers-shell'
-import { ExportMenu }        from './export-menu'
+import { CustomersExport }  from './export-customers'
 import { getLetterhead }     from '@/lib/export/letterhead'
 import { getServerContext }  from '@/lib/context/server'
 import { redirect }          from 'next/navigation'
@@ -48,7 +48,7 @@ export default async function CustomersPage() {
         subtitle={`${data.all.length.toLocaleString('en-IN')} total`}
         actions={
           <div className="flex items-center gap-2">
-            <ExportMenu customers={data.all} letterhead={letterhead} />
+            <CustomersExport customers={data.all} letterhead={letterhead} />
             <AddCustomerModal
               trigger={
                 <Button size="sm">

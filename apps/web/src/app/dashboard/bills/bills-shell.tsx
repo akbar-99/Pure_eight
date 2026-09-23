@@ -8,13 +8,22 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/empty-state'
 import { fmtCurrency } from '@/lib/utils'
 import { Search, Receipt, Ban, X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { getBills, type BillsPageData, type BillRow } from './actions'
+import { getBills, getBillsForExport, type BillsPageData, type BillRow } from './actions'
 import { cancelBill } from '@/app/dashboard/pos/actions'
+import { ExportMenu } from '@/components/shared/export-menu'
+import { exportBillsPdf, exportBillsXlsx } from '@/lib/export/bills-export'
+import type { Letterhead } from '@/lib/export/letterhead'
 
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
   closed: 'success',
   open:   'warning',
   void:   'danger',
+}
+
+/** A date input's 'YYYY-MM-DD', read as the plain calendar day it stands for. */
+function fmtDay(ymd: string) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function fmtWhen(iso: string) {
@@ -80,7 +89,7 @@ function VoidModal({ bill, onClose, onDone }: { bill: BillRow; onClose: () => vo
   )
 }
 
-export function BillsShell({ initial }: { initial: BillsPageData }) {
+export function BillsShell({ initial, letterhead }: { initial: BillsPageData; letterhead: Letterhead }) {
   const [data, setData]       = useState(initial)
   const [search, setSearch]   = useState('')
   const [status, setStatus]   = useState<'all' | 'closed' | 'open' | 'void'>('all')
@@ -93,6 +102,34 @@ export function BillsShell({ initial }: { initial: BillsPageData }) {
   function reload(next?: Partial<{ search: string; status: typeof status; from: string; to: string; page: number }>) {
     const f = { search, status, from, to, page: 0, ...next }
     startTransition(async () => setData(await getBills(f)))
+  }
+
+  /** Prints on the document, so whoever reads it knows which bills it covers. */
+  function describeFilter() {
+    const parts: string[] = []
+    if (from && to)   parts.push(`${fmtDay(from)} – ${fmtDay(to)}`)
+    else if (from)    parts.push(`From ${fmtDay(from)}`)
+    else if (to)      parts.push(`Up to ${fmtDay(to)}`)
+    else              parts.push('All dates')
+    if (status !== 'all') parts.push(`${status} only`)
+    if (search.trim())    parts.push(`matching “${search.trim()}”`)
+    return parts.join(', ')
+  }
+
+  async function exportBills(kind: 'pdf' | 'xlsx') {
+    // Fetched fresh rather than exported from the page on screen, which holds
+    // only the fifty rows being shown.
+    const res = await getBillsForExport({ search, status, from, to })
+    if (res.bills.length === 0) return 0
+
+    const opts = { showOutlet: res.showOutlet, range: describeFilter() }
+    if (kind === 'pdf') await exportBillsPdf(res.bills, letterhead, opts)
+    else                await exportBillsXlsx(res.bills, letterhead, opts)
+
+    if (res.truncated) {
+      toast.warning('Only the most recent 10,000 bills were included. Narrow the date range for the rest.')
+    }
+    return res.bills.length
   }
 
   return (
@@ -132,6 +169,7 @@ export function BillsShell({ initial }: { initial: BillsPageData }) {
           </select>
         </div>
         <Button size="sm" variant="secondary" onClick={() => reload()} loading={pending}>Apply</Button>
+        <ExportMenu noun="bills" count={data.totalCount} onExport={exportBills} />
       </div>
 
       {/* Totals */}

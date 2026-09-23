@@ -51,6 +51,16 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
   // rule holds for any caller, not just the Quick Sale screen.
   if (!input.customerId) return { success: false, error: 'Select a customer before creating a bill.' }
 
+  // Every service must name who performed it, or staff sales and commission are
+  // wrong. Products are exempt: they are goods sold, not work done by anyone.
+  const unassigned = input.lines.filter(l => l.type === 'service' && !l.staffId)
+  if (unassigned.length > 0) {
+    return {
+      success: false,
+      error: `Choose who performed: ${unassigned.map(l => l.name).join(', ')}`,
+    }
+  }
+
   const supabase = createAdminClient()
 
   try {

@@ -132,6 +132,10 @@ export default function POSPage() {
   const grandTotal      = Math.max(0, subtotal + lineTax - discountAmount - loyaltyDiscount + tip)
   const pointsToEarn    = Math.floor(grandTotal / 10000)
 
+  // Service lines still missing the staff member who performed them. Products are
+  // exempt: they are goods sold, not work done by anyone.
+  const unassigned = lines.filter(l => l.kind === 'service' && !l.staffId)
+
   // Payments
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
   const remaining = grandTotal - totalPaid
@@ -158,14 +162,16 @@ export default function POSPage() {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
   function addLine(s: Service) {
-    const defaultStaff = staff[0]
+    // Deliberately no default. Pre-selecting the first staff member credited
+    // every unattended bill to that one person, which distorted their sales
+    // figures and everyone else's commission.
     setLines(prev => [...prev, {
       id:          crypto.randomUUID(),
       serviceId:   s.id,
       kind:        'service',
       name:        s.name,
-      staffId:     defaultStaff?.id ?? '',
-      staffName:   defaultStaff?.full_name ?? '',
+      staffId:     '',
+      staffName:   '',
       qty:         1,
       unitPrice:   s.price,
       discountPct: 0,
@@ -227,6 +233,10 @@ export default function POSPage() {
     // Every bill is attached to a customer — no anonymous walk-in billing.
     if (!customer) { toast.error('Select a customer before checking out'); return }
     if (lines.length === 0) { toast.error('Add at least one service'); return }
+    if (unassigned.length > 0) {
+      toast.error(`Choose who performed: ${unassigned.map(l => l.name).join(', ')}`)
+      return
+    }
     if (remaining > 0) { toast.error(`Payment short by ${fmtCurrency(remaining)}`); return }
 
     const clampedLoyalty = Math.min(loyaltyRedeem, customer?.loyalty_points ?? 0)
@@ -511,12 +521,19 @@ export default function POSPage() {
                       <div key={line.id} className="flex items-center gap-3 p-2 rounded-[4px] bg-offwhite">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-charcoal truncate">{line.name}</p>
-                          {staff.length > 0 && (
+                          {line.kind === 'service' && staff.length > 0 && (
                             <select
                               value={line.staffId}
                               onChange={e => changeLineStaff(line.id, e.target.value)}
-                              className="text-xs text-grey bg-transparent border-none outline-none mt-0.5 cursor-pointer"
+                              aria-label={`Staff for ${line.name}`}
+                              className={cn(
+                                'text-xs mt-0.5 cursor-pointer rounded-[3px] outline-none',
+                                line.staffId
+                                  ? 'text-grey bg-transparent border-none'
+                                  : 'text-danger bg-white border border-danger px-1 py-0.5',
+                              )}
                             >
+                              <option value="">Select staff…</option>
                               {staff.map(s => (
                                 <option key={s.id} value={s.id}>{s.full_name}</option>
                               ))}
@@ -751,11 +768,16 @@ export default function POSPage() {
                       Select a customer to complete this bill
                     </p>
                   )}
+                  {customer && unassigned.length > 0 && (
+                    <p className="text-xs text-danger text-center mt-3">
+                      Choose who performed {unassigned.length === 1 ? 'this service' : `these ${unassigned.length} services`}
+                    </p>
+                  )}
 
                   <Button
                     className="w-full mt-3"
                     size="lg"
-                    disabled={!customer || lines.length === 0 || remaining > 0 || isPending}
+                    disabled={!customer || lines.length === 0 || unassigned.length > 0 || remaining > 0 || isPending}
                     loading={isPending}
                     onClick={handleCheckout}
                   >

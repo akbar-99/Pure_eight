@@ -81,6 +81,7 @@ export function AmendBillForm({
   )
   const [reason,  setReason]  = useState('')
   const [search,  setSearch]  = useState('')
+  const [tab,     setTab]     = useState<'service' | 'product'>('service')
   const [payMode, setPayMode] = useState('')
   const [saving,  startSaving] = useTransition()
 
@@ -148,9 +149,14 @@ export function AmendBillForm({
     })
   }
 
+  // The whole catalogue by default; the search only narrows it. Category is
+  // matched as well as name, so "spa" finds everything in that group.
   const term = search.trim().toLowerCase()
-  const matchedServices = term ? services.filter(s => s.name.toLowerCase().includes(term)).slice(0, 6) : []
-  const matchedProducts = term ? products.filter(p => p.name.toLowerCase().includes(term)).slice(0, 6) : []
+  const hit = (name: string, category: string) =>
+    !term || name.toLowerCase().includes(term) || category.toLowerCase().includes(term)
+
+  const matchedServices = services.filter(s => hit(s.name, s.category))
+  const matchedProducts = products.filter(p => hit(p.name, p.category))
 
   return (
     <Shell
@@ -230,35 +236,85 @@ export function AmendBillForm({
                 )}
               </div>
 
-              {/* Add an item */}
-              <div>
+              {/* Add an item.
+
+                  The catalogue is listed rather than revealed only on typing:
+                  a cashier adding to a bill is usually browsing for what the
+                  customer just asked for, not recalling its exact name. Search
+                  narrows the list rather than being the only way in. */}
+              <div className="border-t border-pearl pt-3">
+                <div className="flex items-center gap-1 mb-2">
+                  {([
+                    ['service', 'Services', services.length],
+                    ['product', 'Products', products.length],
+                  ] as const).map(([value, label, count]) => (
+                    <button
+                      key={value}
+                      onClick={() => { setTab(value); setSearch('') }}
+                      aria-pressed={tab === value}
+                      className={cn(
+                        'h-7 px-3 text-xs rounded-[4px] border transition-colors',
+                        tab === value
+                          ? 'bg-black text-white border-black font-medium'
+                          : 'bg-white text-steel border-silver hover:border-charcoal'
+                      )}
+                    >
+                      {label} <span className={tab === value ? 'text-white/60' : 'text-grey'}>({count})</span>
+                    </button>
+                  ))}
+                </div>
+
                 <Input
-                  placeholder="Add a service or product…"
+                  placeholder={tab === 'service' ? 'Search services…' : 'Search products…'}
                   prefix={<Search className="h-3.5 w-3.5" />}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                 />
-                {term && (matchedServices.length > 0 || matchedProducts.length > 0) && (
-                  <div className="mt-1.5 border border-silver rounded-[4px] divide-y divide-pearl max-h-52 overflow-y-auto">
-                    {matchedServices.map(s => (
+
+                <div className="mt-1.5 border border-silver rounded-[4px] divide-y divide-pearl max-h-56 overflow-y-auto">
+                  {tab === 'service' ? (
+                    matchedServices.length === 0 ? (
+                      <p className="text-xs text-grey text-center py-5">
+                        {services.length === 0 ? 'No services set up' : 'No services match'}
+                      </p>
+                    ) : matchedServices.map(s => (
                       <button key={s.id} onClick={() => addService(s)}
-                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-offwhite text-left">
-                        <span className="text-sm text-charcoal">{s.name}</span>
-                        <span className="text-xs font-mono text-grey">{fmtCurrency(s.price)}</span>
-                      </button>
-                    ))}
-                    {matchedProducts.map(p => (
-                      <button key={p.id} onClick={() => addProduct(p)}
-                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-offwhite text-left">
-                        <span className="text-sm text-charcoal">
-                          {p.name}
-                          <span className="text-[11px] text-grey ml-1.5">{p.stock} in stock</span>
+                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-offwhite text-left group">
+                        <span className="min-w-0">
+                          <span className="block text-sm text-charcoal truncate">{s.name}</span>
+                          <span className="block text-[11px] text-grey">{s.duration_mins} min · {s.category}</span>
                         </span>
-                        <span className="text-xs font-mono text-grey">{fmtCurrency(p.sale_price)}</span>
+                        <span className="flex items-center gap-2 flex-shrink-0 pl-2">
+                          <span className="text-xs font-mono text-charcoal">{fmtCurrency(s.price)}</span>
+                          <Plus className="h-3.5 w-3.5 text-grey group-hover:text-black" />
+                        </span>
                       </button>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    matchedProducts.length === 0 ? (
+                      <p className="text-xs text-grey text-center py-5">
+                        {products.length === 0 ? 'No products are set up for sale' : 'No products match'}
+                      </p>
+                    ) : matchedProducts.map(p => (
+                      <button key={p.id} onClick={() => addProduct(p)}
+                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-offwhite text-left group">
+                        <span className="min-w-0">
+                          <span className="block text-sm text-charcoal truncate">{p.name}</span>
+                          <span className="block text-[11px] text-grey">
+                            {/* Out of stock is a warning, not a block — the sale is real either way. */}
+                            {p.stock > 0
+                              ? `${p.stock} ${p.unit} in stock · ${p.category}`
+                              : <span className="text-warning">Out of stock · {p.category}</span>}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2 flex-shrink-0 pl-2">
+                          <span className="text-xs font-mono text-charcoal">{fmtCurrency(p.sale_price)}</span>
+                          <Plus className="h-3.5 w-3.5 text-grey group-hover:text-black" />
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
 
               {/* What it comes to */}

@@ -61,6 +61,13 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
     }
   }
 
+  // A payment with no mode cannot be reconciled against the drawer or the card
+  // and UPI settlements, and the bill_payments_mode_check constraint would
+  // reject it anyway — better a clear message than a database error.
+  if (input.payments.some(p => !p.mode)) {
+    return { success: false, error: 'Choose how the bill was paid.' }
+  }
+
   const supabase = createAdminClient()
 
   try {

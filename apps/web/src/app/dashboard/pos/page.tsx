@@ -57,6 +57,16 @@ interface SplitPayment {
  */
 const PAYMENT_MODES = ALL_PAYMENT_MODES.filter(m => m.value !== 'loyalty_points')
 
+/**
+ * The modes worth a button of their own at the counter.
+ *
+ * Nearly every salon payment is one of these three, and a bill is settled a
+ * hundred times a day, so they are one tap rather than a trip through a
+ * dropdown. The rest stay behind "More".
+ */
+const QUICK_MODES = ['cash', 'upi', 'card'] as const
+const OTHER_MODES = PAYMENT_MODES.filter(m => !QUICK_MODES.includes(m.value as typeof QUICK_MODES[number]))
+
 function computeLine(l: LineItem) {
   const gross         = l.unitPrice * l.qty
   const discountValue = Math.round(gross * (l.discountPct / 100))
@@ -90,7 +100,10 @@ export default function POSPage() {
 
   // Split payments
   const [payments, setPayments] = useState<SplitPayment[]>([
-    { id: '1', mode: 'cash', amount: 0 },
+    // No default mode, for the same reason as the staff member on a service
+    // line: 'cash' left untouched recorded every card and UPI sale as cash,
+    // and the day's takings could not be reconciled against the drawer.
+    { id: '1', mode: '', amount: 0 },
   ])
 
   // Receipt modal
@@ -135,6 +148,10 @@ export default function POSPage() {
   // Service lines still missing the staff member who performed them. Products are
   // exempt: they are goods sold, not work done by anyone.
   const unassigned = lines.filter(l => l.kind === 'service' && !l.staffId)
+
+  // Only rows carrying money need a mode: an empty row is dropped at checkout
+  // and blocking on it would strand the cashier on a row they never filled in.
+  const unnamedPayments = payments.filter(p => p.amount > 0 && !p.mode)
 
   // Payments
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
@@ -213,9 +230,7 @@ export default function POSPage() {
   }
 
   function addPayment() {
-    const usedModes = payments.map(p => p.mode)
-    const nextMode  = PAYMENT_MODES.find(m => !usedModes.includes(m.value))?.value ?? 'cash'
-    setPayments(prev => [...prev, { id: crypto.randomUUID(), mode: nextMode, amount: 0 }])
+    setPayments(prev => [...prev, { id: crypto.randomUUID(), mode: '', amount: 0 }])
   }
 
   function removePayment(id: string) {
@@ -237,6 +252,7 @@ export default function POSPage() {
       toast.error(`Choose who performed: ${unassigned.map(l => l.name).join(', ')}`)
       return
     }
+    if (unnamedPayments.length > 0) { toast.error('Choose how the bill was paid'); return }
     if (remaining > 0) { toast.error(`Payment short by ${fmtCurrency(remaining)}`); return }
 
     const clampedLoyalty = Math.min(loyaltyRedeem, customer?.loyalty_points ?? 0)
@@ -303,7 +319,7 @@ export default function POSPage() {
     setLines([]); setCustomer(null); setCustSearch('')
     setDiscountType('none'); setDiscountInput(0)
     setLoyaltyRedeem(0); setNotes(''); setTip(0)
-    setPayments([{ id: '1', mode: 'cash', amount: 0 }])
+    setPayments([{ id: '1', mode: '', amount: 0 }])
   }
 
   const filtered = services.filter(s =>
@@ -695,18 +711,48 @@ export default function POSPage() {
                   <div className="border-t border-pearl pt-3">
                     <p className="text-xs font-medium text-charcoal uppercase tracking-wide mb-2">Payment</p>
                     <div className="space-y-2">
-                      {payments.map((p, i) => (
-                        <div key={p.id} className="flex items-center gap-1.5">
-                          <select
-                            value={p.mode}
-                            onChange={e => updatePayment(p.id, 'mode', e.target.value)}
-                            className="flex-1 h-8 rounded-[4px] border border-silver text-xs text-charcoal px-2 focus:outline-none focus:border-black"
-                          >
-                            {PAYMENT_MODES.map(m => (
-                              <option key={m.value} value={m.value}>{m.label}</option>
-                            ))}
-                          </select>
-                          <div className="relative w-24">
+                      {payments.map(p => (
+                        <div key={p.id} className={cn(payments.length > 1 && 'border-l-2 border-pearl pl-2')}>
+                          {/* The three usual modes are one tap each; the rest sit
+                              behind More, which shows the chosen one once picked. */}
+                          <div className="flex items-center gap-1 mb-1.5">
+                            {QUICK_MODES.map(value => {
+                              const label = PAYMENT_MODES.find(m => m.value === value)!.label
+                              return (
+                                <button
+                                  key={value}
+                                  onClick={() => updatePayment(p.id, 'mode', value)}
+                                  aria-pressed={p.mode === value}
+                                  className={cn(
+                                    'h-7 px-2.5 text-xs rounded-[4px] border transition-colors',
+                                    p.mode === value
+                                      ? 'bg-black text-white border-black font-medium'
+                                      : 'bg-white text-steel border-silver hover:border-charcoal'
+                                  )}
+                                >
+                                  {label}
+                                </button>
+                              )
+                            })}
+                            <select
+                              value={OTHER_MODES.some(m => m.value === p.mode) ? p.mode : ''}
+                              onChange={e => updatePayment(p.id, 'mode', e.target.value)}
+                              aria-label="Other payment mode"
+                              className={cn(
+                                'h-7 flex-1 min-w-0 text-xs rounded-[4px] border px-1.5 cursor-pointer focus:outline-none',
+                                OTHER_MODES.some(m => m.value === p.mode)
+                                  ? 'bg-black text-white border-black font-medium'
+                                  : 'bg-white text-steel border-silver hover:border-charcoal'
+                              )}
+                            >
+                              <option value="">More…</option>
+                              {OTHER_MODES.map(m => (
+                                <option key={m.value} value={m.value}>{m.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="relative flex-1">
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-grey">₹</span>
                             <input
                               type="number" min={0}
@@ -730,6 +776,7 @@ export default function POSPage() {
                               <X className="h-3 w-3" />
                             </button>
                           )}
+                        </div>
                         </div>
                       ))}
                     </div>
@@ -773,11 +820,16 @@ export default function POSPage() {
                       Choose who performed {unassigned.length === 1 ? 'this service' : `these ${unassigned.length} services`}
                     </p>
                   )}
+                  {customer && unassigned.length === 0 && unnamedPayments.length > 0 && (
+                    <p className="text-xs text-danger text-center mt-3">
+                      Choose how the bill was paid
+                    </p>
+                  )}
 
                   <Button
                     className="w-full mt-3"
                     size="lg"
-                    disabled={!customer || lines.length === 0 || unassigned.length > 0 || remaining > 0 || isPending}
+                    disabled={!customer || lines.length === 0 || unassigned.length > 0 || unnamedPayments.length > 0 || remaining > 0 || isPending}
                     loading={isPending}
                     onClick={handleCheckout}
                   >

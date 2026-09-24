@@ -1,7 +1,8 @@
 'use server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { istNow } from '@/lib/utils'
+import { istNow, istToday } from '@/lib/utils'
 import { getServerContext } from '@/lib/context/server'
+import { resolveScope } from '@/lib/context/scope'
 import { revalidatePath } from 'next/cache'
 import { depreciationBetween, type DepreciableAsset } from '@/lib/assets/depreciation'
 
@@ -42,28 +43,36 @@ export type FinancePageData = {
 export async function getFinancePageData(from: string, to: string): Promise<FinancePageData> {
   const ctx = await getServerContext()
   if (!ctx) throw new Error('Not authenticated')
-  const { outletId, isHqUser, tenantId } = ctx
+  const { outletId, isHqUser } = ctx
   const admin = createAdminClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = admin as any
 
-  // IST today
-  const now = new Date()
-  const ist = istNow(now)
-  const today = ist.toISOString().slice(0, 10)
+  // HQ covers its own tenant and every franchisee beneath it.
+  const scope = await resolveScope(ctx)
 
-  let billsQ = admin.from('bills').select('total, payment_mode').eq('status', 'closed')
-    .gte('created_at', from).lte('created_at', to + 'T23:59:59Z')
-  if (outletId) billsQ = billsQ.eq('outlet_id', outletId)
+  const today = istToday()
+  // The business day runs on IST, so bound on it. Bounding on UTC pulled in the
+  // small hours of the next day and dropped the first five and a half of this one.
+  const bounds      = { start: `${from}T00:00:00+05:30`,  end: `${to}T23:59:59.999+05:30` }
+  const todayBounds = { start: `${today}T00:00:00+05:30`, end: `${today}T23:59:59.999+05:30` }
 
-  let todayBillsQ = admin.from('bills').select('total, payment_mode').eq('status', 'closed')
-    .gte('created_at', today).lte('created_at', today + 'T23:59:59Z')
-  if (outletId) todayBillsQ = todayBillsQ.eq('outlet_id', outletId)
+  // 'total' only: bills carries no payment_mode column, and selecting it made
+  // every one of these queries fail, so revenue on this screen was always zero.
+  const billsQ = admin.from('bills').select('total').eq('status', 'closed')
+    .in('outlet_id', scope.outletIds)
+    .gte('created_at', bounds.start).lte('created_at', bounds.end)
+    .is('deleted_at', null)
+
+  const todayBillsQ = admin.from('bills').select('id, total').eq('status', 'closed')
+    .in('outlet_id', scope.outletIds)
+    .gte('created_at', todayBounds.start).lte('created_at', todayBounds.end)
+    .is('deleted_at', null)
 
   let expensesQ = db.from('expenses').select('*').is('deleted_at', null)
     .gte('expense_date', from).lte('expense_date', to)
     .order('expense_date', { ascending: false })
-  if (outletId) expensesQ = expensesQ.eq('outlet_id', outletId)
+  if (scope.outletIds.length > 0) expensesQ = expensesQ.in('outlet_id', scope.outletIds)
 
   const [billsRes, expensesRes, todayBillsRes] = await Promise.all([
     billsQ,
@@ -71,9 +80,9 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
     todayBillsQ,
   ])
 
-  const bills = (billsRes.data ?? []) as unknown as Array<{ total: number; payment_mode: string }>
+  const bills = (billsRes.data ?? []) as unknown as Array<{ total: number }>
   const expenses = (expensesRes.data ?? []) as ExpenseRow[]
-  const todayBills = (todayBillsRes.data ?? []) as unknown as Array<{ total: number; payment_mode: string }>
+  const todayBills = (todayBillsRes.data ?? []) as unknown as Array<{ id: string; total: number }>
 
   // Revenue
   const revenue_paise = bills.reduce((s, b) => s + (b.total ?? 0), 0)
@@ -92,7 +101,7 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
     .from('assets')
     .select('purchase_date, purchase_cost, salvage_value, useful_life_months, disposed_on, outlet_id, brand_id')
     .is('deleted_at', null)
-    .eq('brand_id', tenantId)
+    .in('brand_id', scope.tenantIds)
   type ScopedAsset = DepreciableAsset & { outlet_id: string | null }
   const depreciation_paise = ((depAssets ?? []) as unknown as ScopedAsset[])
     // An outlet carries its own equipment plus anything held centrally.
@@ -107,11 +116,20 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
 
   // Day-end summary
   const day_revenue_paise = todayBills.reduce((s, b) => s + (b.total ?? 0), 0)
+
+  // Split from bill_payments rather than a mode on the bill. A bill may be
+  // settled across several modes, so there is no single mode to read off it.
   const payMap = new Map<string, { amount_paise: number; count: number }>()
-  for (const b of todayBills) {
-    const mode = b.payment_mode ?? 'unknown'
-    const cur = payMap.get(mode) ?? { amount_paise: 0, count: 0 }
-    payMap.set(mode, { amount_paise: cur.amount_paise + (b.total ?? 0), count: cur.count + 1 })
+  if (todayBills.length > 0) {
+    const { data: payRows } = await admin
+      .from('bill_payments')
+      .select('mode, amount')
+      .in('bill_id', todayBills.map(b => b.id))
+
+    for (const p of (payRows ?? []) as { mode: string; amount: number }[]) {
+      const cur = payMap.get(p.mode) ?? { amount_paise: 0, count: 0 }
+      payMap.set(p.mode, { amount_paise: cur.amount_paise + (p.amount ?? 0), count: cur.count + 1 })
+    }
   }
   const day_payment_breakdown: PaymentBreakdown[] = [...payMap.entries()].map(([mode, v]) => ({
     mode, ...v,

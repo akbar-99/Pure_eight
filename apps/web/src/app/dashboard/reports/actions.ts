@@ -2,6 +2,7 @@
 
 import { createAdminClient }  from '@/lib/supabase/admin'
 import { getServerContext }   from '@/lib/context/server'
+import { resolveScope }       from '@/lib/context/scope'
 export type { DateRange } from '@/app/dashboard/overview/actions'
 import {
   parseScheme, commissionEarned, describeScheme, NO_COMMISSION, type CommissionScheme,
@@ -81,13 +82,17 @@ export async function fetchReportData(range: DateRange): Promise<ReportData> {
   const admin = createAdminClient()
 
   const { start, end } = istBounds(range.from, range.to)
-  const isHq     = ctx.isHqUser
-  const outletId = ctx.outletId
+  // HQ covers its own tenant and every franchisee beneath it.
+  const scope = await resolveScope(ctx)
 
+  /**
+   * Narrows a query to the outlets in scope — one for an outlet user, the whole
+   * group for HQ. Dropping the filter for HQ, as this used to, summed every
+   * outlet in the database whether or not it belonged to the group.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function outletFilter(q: any) {
-    if (!isHq && outletId) return q.eq('outlet_id', outletId)
-    return q
+    return q.in('outlet_id', scope.outletIds)
   }
 
   // ── 1. Closed bills in range ───────────────────────────────────────────────

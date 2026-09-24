@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getServerContext } from '@/lib/context/server'
+import { resolveScope } from '@/lib/context/scope'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -115,14 +116,20 @@ export async function fetchTrendData(
   if (!ctx) throw new Error('Not authenticated')
   const admin = createAdminClient()
 
-  const isHq     = ctx.isHqUser
-  const outletId = ctx.outletId
-  const tenantId = ctx.tenantId
+  // HQ covers its own tenant and every franchisee beneath it.
+  // HQ covers its own tenant and every franchisee beneath it.
+  const scope = await resolveScope(ctx)
 
+  /**
+   * Narrows a query to the outlets in scope.
+   *
+   * The HQ branch used to filter bills on tenant_id, a column bills does not
+   * have, so every query on this screen failed outright for an HQ user and the
+   * whole of Business Trends read empty for them.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function outletFilter(q: any) {
-    if (!isHq && outletId) return q.eq('outlet_id', outletId)
-    return q.eq('tenant_id', tenantId)
+    return q.in('outlet_id', scope.outletIds)
   }
 
   const { start, end } = istBounds(range.from, range.to)
@@ -207,10 +214,10 @@ export async function fetchTrendData(
         .gte('created_at', start).lte('created_at', end)
         .is('deleted_at', null)
     )
-    const staffNamesRes = await (isHq || !outletId
-      ? admin.from('staff').select('id, full_name').is('deleted_at', null)
-      : admin.from('staff').select('id, full_name').eq('outlet_id', outletId).is('deleted_at', null)
-    )
+    const staffNamesRes = await admin
+      .from('staff').select('id, full_name')
+      .in('outlet_id', scope.outletIds)
+      .is('deleted_at', null)
     const staffNames = new Map<string, string>(
       ((staffNamesRes.data ?? []) as { id: string; full_name: string }[]).map(s => [s.id, s.full_name])
     )
@@ -241,12 +248,14 @@ export async function fetchTrendData(
 
   // ── HQ outlet breakdown ────────────────────────────────────────────────────
   let outlets: OutletPoint[] | undefined
-  if (isHq) {
+  if (ctx.isHqUser) {
     const outletMap = new Map<string, { name: string; revenue: number; billCount: number }>()
+    // By id, not by tenant: HQ's own tenant owns no outlets, so filtering on it
+    // left the per-branch breakdown empty on the one screen that exists for it.
     const outletsRes = await admin
       .from('outlets')
       .select('id, name')
-      .eq('tenant_id', tenantId)
+      .in('id', scope.outletIds)
       .is('deleted_at', null)
     for (const o of (outletsRes.data ?? []) as { id: string; name: string }[]) {
       outletMap.set(o.id, { name: o.name, revenue: 0, billCount: 0 })
@@ -277,7 +286,7 @@ export async function fetchTrendData(
     outlets,
     range,
     compareRange,
-    isHqUser: isHq,
+    isHqUser: ctx.isHqUser,
   }
 }
 

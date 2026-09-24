@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getServerContext } from '@/lib/context/server'
+import { resolveScope } from '@/lib/context/scope'
 
 export type BillRow = {
   id:            string
@@ -124,6 +125,9 @@ async function billsScope(filter: BillsFilter) {
   if (!ctx) return null
 
   const admin = createAdminClient()
+  // HQ covers its own tenant and every franchisee beneath it; an outlet user
+  // covers only themselves.
+  const scope = await resolveScope(ctx)
 
   // A customer's name and mobile live on another table, so resolve the search to
   // customer ids first and match bills on either their number or that set.
@@ -133,7 +137,7 @@ async function billsScope(filter: BillsFilter) {
     const { data: matches } = await admin
       .from('customers')
       .select('id')
-      .eq('brand_id', ctx.tenantId)
+      .in('brand_id', scope.tenantIds)
       .or(`full_name.ilike.%${term}%,mobile.ilike.%${term}%`)
       .limit(500)
     customerIds = ((matches ?? []) as { id: string }[]).map(c => c.id)
@@ -143,7 +147,7 @@ async function billsScope(filter: BillsFilter) {
   const scoped = <T>(q: T): T => {
     let b = q as unknown as ReturnType<typeof admin.from>
     b = b.is('deleted_at', null)
-    if (ctx.outletId) b = b.eq('outlet_id', ctx.outletId)
+    b = b.in('outlet_id', scope.outletIds)
     if (filter.status && filter.status !== 'all') b = b.eq('status', filter.status)
     if (filter.from) b = b.gte('created_at', `${filter.from}T00:00:00+05:30`)
     if (filter.to)   b = b.lte('created_at', `${filter.to}T23:59:59.999+05:30`)

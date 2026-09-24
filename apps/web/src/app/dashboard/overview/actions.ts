@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { istNow } from '@/lib/utils'
 import { getServerContext }  from '@/lib/context/server'
+import { resolveScope }      from '@/lib/context/scope'
 
 // ── Date range types ──────────────────────────────────────────────────────────
 
@@ -104,7 +105,7 @@ async function fetchSnapshot(
   supabase: ReturnType<typeof createAdminClient>,
   bounds: { start: string; end: string },
   outletFilter: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>,
-  tenantId: string,
+  tenantIds: string[],
 ): Promise<StatSnapshot> {
   const { start, end } = bounds
 
@@ -152,7 +153,7 @@ async function fetchSnapshot(
     supabase
       .from('customers')
       .select('id')
-      .eq('brand_id', tenantId)
+      .in('brand_id', tenantIds)
       .gte('created_at', start)
       .lte('created_at', end)
       .is('deleted_at', null),
@@ -160,7 +161,7 @@ async function fetchSnapshot(
     supabase
       .from('loyalty_txns')
       .select('points')
-      .eq('brand_id', tenantId)
+      .in('brand_id', tenantIds)
       .eq('type', 'earn')
       .gte('created_at', start)
       .lte('created_at', end),
@@ -207,8 +208,8 @@ export async function fetchDashboardData(
   // keys off custom JWT claims (jwt_outlet_id / jwt_tenant_id), and the
   // set_custom_claims access-token hook is not enabled on this project, so those
   // claims are absent and every policy evaluates false. The dashboard was the only
-  // module still using it. Scoping below is enforced in application code via
-  // outletFilter + tenantId, matching the other 27 modules.
+  // module still using it. Scoping below is enforced in application code, from
+  // the tenants and outlets the signed-in user actually covers.
   const supabase = createAdminClient()
 
   const resolved = range ?? todayRange()
@@ -217,20 +218,26 @@ export async function fetchDashboardData(
   const prev      = prevWindow(from, to)
   const prevBounds = istBounds(prev.from, prev.to)
 
-  const isHq   = ctx?.isHqUser ?? false
-  const tenantId = ctx?.tenantId ?? ''
+  // HQ covers its own tenant and every franchisee beneath it; an outlet user
+  // covers only themselves. Resolved once and used on both axes.
+  const scope = ctx
+    ? await resolveScope(ctx)
+    : { tenantIds: [] as string[], outletIds: [] as string[] }
 
-  /** Attach outlet filter when user is not HQ. */
+  /**
+   * Narrows a query to the outlets in scope — one for an outlet user, the whole
+   * group for HQ. Dropping the filter for HQ, as this used to, summed every
+   * outlet in the database whether or not it belonged to the group.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function outletFilter(q: any) {
-    if (!isHq && ctx?.outletId) return q.eq('outlet_id', ctx.outletId)
-    return q
+    return q.in('outlet_id', scope.outletIds)
   }
 
   // ── Run current + previous snapshots in parallel ──────────────────────────
   const [current, previous] = await Promise.all([
-    fetchSnapshot(supabase, bounds,     outletFilter, tenantId),
-    fetchSnapshot(supabase, prevBounds, outletFilter, tenantId),
+    fetchSnapshot(supabase, bounds,     outletFilter, scope.tenantIds),
+    fetchSnapshot(supabase, prevBounds, outletFilter, scope.tenantIds),
   ])
 
   // ── Daily chart (for current range) ──────────────────────────────────────
@@ -381,7 +388,7 @@ export async function fetchDashboardData(
   return {
     current, previous, daily,
     topServices, topStaff, recentActivity, paymentModes,
-    isHqUser: isHq,
+    isHqUser: ctx?.isHqUser ?? false,
     outletId: ctx?.outletId ?? '',
     range: resolved,
     prevRange: prev,

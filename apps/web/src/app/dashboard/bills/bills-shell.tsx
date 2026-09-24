@@ -235,7 +235,22 @@ export function BillsShell({ initial, letterhead }: { initial: BillsPageData; le
                     <p className="text-sm text-charcoal">{b.customer_name ?? '—'}</p>
                     {b.customer_mobile && <p className="text-xs text-grey font-mono">{b.customer_mobile}</p>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-steel">{b.item_count}</td>
+                  {/* The names, not the count: what was done is the thing anyone
+                      scanning this list wants, and a bare "2" says nothing. */}
+                  <td className="px-4 py-3 text-xs text-steel max-w-[260px]">
+                    {b.items.length === 0 ? '—' : (
+                      <span title={b.items.map(i => i.qty > 1 ? `${i.name} ×${i.qty}` : i.name).join(', ')}>
+                        {b.items.slice(0, 3).map((i, idx) => (
+                          <span key={idx} className="block truncate">
+                            {i.name}{i.qty > 1 && <span className="text-grey"> ×{i.qty}</span>}
+                          </span>
+                        ))}
+                        {b.items.length > 3 && (
+                          <span className="block text-grey">+{b.items.length - 3} more</span>
+                        )}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-mono text-charcoal">{fmtCurrency(b.total)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">

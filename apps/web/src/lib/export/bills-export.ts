@@ -13,7 +13,12 @@ export type ExportBill = {
   customer_mobile: string | null
   outlet_name:     string | null
   item_count:      number
+  items:           { name: string; qty: number }[]
 }
+
+/** "Hair cut ×2, Head massage" — what was billed, not how many lines it took. */
+const itemList = (items: { name: string; qty: number }[]) =>
+  items.length === 0 ? '—' : items.map(i => i.qty > 1 ? `${i.name} ×${i.qty}` : i.name).join(', ')
 
 const rupees = (paise: number) =>
   '₹' + (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -26,7 +31,7 @@ function columns(showOutlet: boolean): readonly ExportColumn[] {
     ...(showOutlet ? [{ header: 'Outlet', width: 22 }] : []),
     { header: 'Customer', width: 26 },
     { header: 'Mobile',   width: 16 },
-    { header: 'Items',    width:  8, align: 'right' as const },
+    { header: 'Items',    width: 40 },
     { header: 'Status',   width: 12 },
     { header: 'Total',    width: 14, align: 'right' as const },
   ]
@@ -48,7 +53,7 @@ function spec(bills: ExportBill[], head: Letterhead, opts: { showOutlet: boolean
       ...(opts.showOutlet ? [b.outlet_name ?? '—'] : []),
       b.customer_name ?? '—',
       b.customer_mobile ?? '—',
-      b.item_count,
+      itemList(b.items),
       b.status.charAt(0).toUpperCase() + b.status.slice(1),
       rupees(b.total),
     ]),

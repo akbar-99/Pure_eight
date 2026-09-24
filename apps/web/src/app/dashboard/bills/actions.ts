@@ -13,6 +13,8 @@ export type BillRow = {
   customer_mobile: string | null
   outlet_name:   string | null
   item_count:    number
+  /** What was actually billed, in the order the lines were added. */
+  items:         { name: string; qty: number }[]
   /** Times this bill has been amended since it was closed. */
   amend_count:   number
 }
@@ -58,13 +60,13 @@ const EXPORT_CHUNK = 1000
 const EXPORT_MAX   = 10_000
 
 const SELECT_ROW =
-  'id, bill_number, created_at, total, status, customers(full_name, mobile), outlets(name), bill_lines(id)'
+  'id, bill_number, created_at, total, status, customers(full_name, mobile), outlets(name), bill_lines(id, item_name, qty)'
 
 type Joined = {
   id: string; bill_number: string; created_at: string; total: number; status: string
   customers: { full_name: string; mobile: string } | null
   outlets:   { name: string } | null
-  bill_lines: { id: string }[] | null
+  bill_lines: { id: string; item_name: string; qty: number }[] | null
 }
 
 /**
@@ -104,6 +106,7 @@ function toRows(data: unknown, amends?: Map<string, number>): BillRow[] {
     customer_mobile: b.customers?.mobile ?? null,
     outlet_name:     b.outlets?.name ?? null,
     item_count:      b.bill_lines?.length ?? 0,
+    items:           (b.bill_lines ?? []).map(l => ({ name: l.item_name, qty: l.qty })),
     amend_count:     amends?.get(b.id) ?? 0,
   }))
 }

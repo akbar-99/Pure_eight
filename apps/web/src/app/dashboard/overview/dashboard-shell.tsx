@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useTransition } from 'react'
-import { istNow } from '@/lib/utils'
+import { istNow, fmtCalendarDay } from '@/lib/utils'
 import { RefreshCw } from 'lucide-react'
 import { fetchDashboardData } from './actions'
 import type { DashboardData, DateRange } from './actions'
@@ -25,8 +25,8 @@ interface DashboardShellProps {
 }
 
 function fmtCompareLabel(prev: { from: string; to: string }) {
-  const f = new Date(prev.from).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  const t = new Date(prev.to).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  const f = fmtCalendarDay(prev.from, { day: 'numeric', month: 'short' })
+  const t = fmtCalendarDay(prev.to)
   return prev.from === prev.to ? `vs ${f}` : `vs ${f} – ${t}`
 }
 

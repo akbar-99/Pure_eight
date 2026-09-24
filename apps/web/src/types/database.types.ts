@@ -894,7 +894,7 @@ export type Database = {
           },
         ]
       }
-      commission_payouts: {
+      staff_payouts: {
         Row: {
           amount: number
           created_at: string
@@ -939,21 +939,21 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "commission_payouts_outlet_id_fkey"
+            foreignKeyName: "staff_payouts_outlet_id_fkey"
             columns: ["outlet_id"]
             isOneToOne: false
             referencedRelation: "outlets"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "commission_payouts_paid_by_fkey"
+            foreignKeyName: "staff_payouts_paid_by_fkey"
             columns: ["paid_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "commission_payouts_staff_id_fkey"
+            foreignKeyName: "staff_payouts_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
@@ -2313,6 +2313,7 @@ export type Database = {
           id: string
           joining_date: string | null
           mobile: string | null
+          monthly_salary: number
           outlet_id: string
           role_title: string | null
           skills: string[]
@@ -2329,6 +2330,7 @@ export type Database = {
           id?: string
           joining_date?: string | null
           mobile?: string | null
+          monthly_salary?: number
           outlet_id: string
           role_title?: string | null
           skills?: string[]
@@ -2345,6 +2347,7 @@ export type Database = {
           id?: string
           joining_date?: string | null
           mobile?: string | null
+          monthly_salary?: number
           outlet_id?: string
           role_title?: string | null
           skills?: string[]

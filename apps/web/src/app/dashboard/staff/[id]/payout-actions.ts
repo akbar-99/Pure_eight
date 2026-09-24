@@ -6,7 +6,7 @@ import { requireServerContext } from '@/lib/context/server'
 import { recordAudit } from '@/lib/audit/log'
 
 /**
- * Recording commission actually paid.
+ * Recording pay actually handed over — salary, commission, or both together.
  *
  * The amount is written down rather than worked out again later. What was
  * handed over is a fact: bills can be amended or voided after payday, and a
@@ -48,7 +48,7 @@ export async function recordCommissionPayout(
   // An outlet user may only pay their own outlet's staff.
   if (ctx.outletId && s.outlet_id !== ctx.outletId) return { error: 'That staff member is at another outlet.' }
 
-  const { error } = await admin.from('commission_payouts').insert({
+  const { error } = await admin.from('staff_payouts').insert({
     staff_id:    s.id,
     outlet_id:   s.outlet_id,
     period_from: input.from,
@@ -62,7 +62,7 @@ export async function recordCommissionPayout(
   if (error) return { error: missingTable(error.message) ?? error.message }
 
   await recordAudit(ctx, {
-    action:     'pay_commission',
+    action:     'pay_staff',
     entityType: 'staff',
     entityId:   s.id,
     outletId:   s.outlet_id,
@@ -71,7 +71,7 @@ export async function recordCommissionPayout(
       amount:    Math.round(input.amount),
       period:    `${input.from} to ${input.to}`,
       mode:      input.mode,
-      reason:    input.notes?.trim() || `Commission paid to ${s.full_name}`,
+      reason:    input.notes?.trim() || `Paid to ${s.full_name}`,
     },
   })
 
@@ -86,7 +86,7 @@ export async function withdrawCommissionPayout(payoutId: string): Promise<{ erro
   const admin = createAdminClient()
 
   const { data: row } = await admin
-    .from('commission_payouts')
+    .from('staff_payouts')
     .select('id, staff_id, outlet_id, amount, period_from, period_to, deleted_at')
     .eq('id', payoutId)
     .maybeSingle()
@@ -101,14 +101,14 @@ export async function withdrawCommissionPayout(payoutId: string): Promise<{ erro
   if (ctx.outletId && p.outlet_id !== ctx.outletId) return { error: 'That payment belongs to another outlet.' }
 
   const { error } = await admin
-    .from('commission_payouts')
+    .from('staff_payouts')
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', payoutId)
 
   if (error) return { error: error.message }
 
   await recordAudit(ctx, {
-    action:     'withdraw_commission_payment',
+    action:     'withdraw_staff_payment',
     entityType: 'staff',
     entityId:   p.staff_id,
     outletId:   p.outlet_id,
@@ -126,7 +126,7 @@ export async function withdrawCommissionPayout(payoutId: string): Promise<{ erro
  * with Postgres's own wording. Say what to do instead.
  */
 function missingTable(message: string): string | null {
-  return /relation .*commission_payouts.* does not exist|could not find the table/i.test(message)
-    ? 'Commission payouts are not set up yet — run the commission_payouts migration first.'
+  return /relation .*staff_payouts.* does not exist|could not find the table/i.test(message)
+    ? 'Staff payments are not set up yet — run the staff_salary migration first.'
     : null
 }

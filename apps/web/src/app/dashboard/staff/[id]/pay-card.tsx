@@ -23,12 +23,15 @@ function fmtWhen(iso: string) {
   })
 }
 
-export function CommissionCard({ data, onChange }: { data: StaffDetail; onChange: () => void }) {
+export function PayCard({ data, onChange }: { data: StaffDetail; onChange: () => void }) {
   const [paying, setPaying] = useState(false)
   const [pending, startTransition] = useTransition()
 
-  const { commission, paid, outstanding, payments, payoutsReady, range, profile } = data
-  const cleared = commission > 0 && outstanding <= 0
+  const { commission, salary, salaryNote, totalDue, paid, outstanding,
+          payments, payoutsReady, range, profile } = data
+  const onSalary    = profile.monthlySalary > 0
+  const onCommission = profile.rate !== '—'
+  const cleared     = totalDue > 0 && outstanding <= 0
   const inPeriod = payments.filter(p => p.inPeriod)
   // A payment whose period straddles the dates on screen is not counted here,
   // so say so rather than letting the total look wrong.
@@ -48,13 +51,13 @@ export function CommissionCard({ data, onChange }: { data: StaffDetail; onChange
       <Card className="mb-5">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
           <div>
-            <p className="text-sm font-semibold text-charcoal">Commission</p>
+            <p className="text-sm font-semibold text-charcoal">Pay</p>
             <p className="text-xs text-grey mt-0.5">
               {fmtCalendarDay(range.from)} – {fmtCalendarDay(range.to)}
             </p>
           </div>
 
-          {profile.rate !== '—' && commission > 0 && (
+          {totalDue > 0 && (
             cleared ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success bg-success/10 border border-success/30 rounded-[4px] px-2.5 py-1.5">
                 <Check className="h-3.5 w-3.5" />
@@ -69,8 +72,14 @@ export function CommissionCard({ data, onChange }: { data: StaffDetail; onChange
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <Figure label="Earned" value={fmtCurrency(commission)} />
+        {/* Only the parts that apply to this person: a salaried receptionist
+            has no commission line, and a stylist on percentage has no salary. */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {onSalary && (
+            <Figure label={salaryNote ? `Salary · ${salaryNote}` : 'Salary'} value={fmtCurrency(salary)} />
+          )}
+          {onCommission && <Figure label={`Commission · ${profile.rate}`} value={fmtCurrency(commission)} />}
+          <Figure label="Total due" value={fmtCurrency(totalDue)} />
           <Figure label="Paid" value={fmtCurrency(paid)} />
           <Figure
             label={outstanding < 0 ? 'Overpaid' : 'Still owed'}
@@ -79,15 +88,16 @@ export function CommissionCard({ data, onChange }: { data: StaffDetail; onChange
           />
         </div>
 
-        {profile.rate === '—' && (
+        {!onSalary && !onCommission && (
           <p className="text-xs text-grey mt-3">
-            No commission rate is set for {profile.name}, so nothing is owed. Set one in Staff &amp; HR.
+            {profile.name} has neither a salary nor a commission rate, so nothing is owed.
+            Set one in Staff &amp; HR.
           </p>
         )}
 
         {!payoutsReady && (
           <p className="text-xs text-danger mt-3">
-            Commission payments are not set up yet — run the commission_payouts migration to start recording them.
+            Staff payments are not set up yet — run the staff_salary migration to start recording them.
           </p>
         )}
 
@@ -196,7 +206,7 @@ function PayoutModal({ data, onClose, onDone }: {
           <div>
             <h2 className="text-base font-semibold text-charcoal">Pay {profile.name}</h2>
             <p className="text-xs text-grey mt-0.5">
-              Commission for {fmtCalendarDay(range.from)} – {fmtCalendarDay(range.to)}
+              Pay for {fmtCalendarDay(range.from)} – {fmtCalendarDay(range.to)}
             </p>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">

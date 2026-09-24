@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { fmtCurrency } from '@/lib/utils'
 import { Pencil, Trash2, MoreHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
@@ -126,7 +127,7 @@ export function StaffTable({ staff }: StaffTableProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-silver bg-offwhite">
-            {['Staff Member', 'Role', 'Skills', 'Type', 'Status', 'Joined', 'Commission', ''].map(h => (
+            {['Staff Member', 'Role', 'Skills', 'Type', 'Status', 'Joined', 'Salary', 'Commission', ''].map(h => (
               <th
                 key={h}
                 className="text-left px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide whitespace-nowrap"
@@ -201,6 +202,11 @@ export function StaffTable({ staff }: StaffTableProps) {
                 {/* Joined */}
                 <td className="px-4 py-3 text-grey whitespace-nowrap">
                   {s.joining_date ? fmtDate(s.joining_date) : '—'}
+                </td>
+
+                {/* Salary — blank rather than ₹0 for anyone on commission alone. */}
+                <td className="px-4 py-3 text-xs text-charcoal font-mono whitespace-nowrap">
+                  {s.monthly_salary > 0 ? `${fmtCurrency(s.monthly_salary)}/mo` : <span className="text-grey font-sans">—</span>}
                 </td>
 
                 {/* Commission */}

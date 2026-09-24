@@ -40,6 +40,8 @@ export async function addStaff(input: {
   joining_date?: string
   commission_type?: 'none' | 'percentage' | 'fixed'
   commission_value?: number
+  /** Rupees as entered; stored as paise like every other amount. */
+  monthly_salary?: number
 }): Promise<{ error?: string; id?: string }> {
   const ctx = await getServerContext()
   if (!ctx) return { error: 'Not authenticated' }
@@ -63,6 +65,7 @@ export async function addStaff(input: {
       employment_type:   input.employment_type ?? 'full_time',
       status:            input.status ?? 'active',
       joining_date:      input.joining_date || null,
+      monthly_salary:    Math.round((input.monthly_salary ?? 0) * 100),
       commission_scheme,
     })
     .select('id')
@@ -86,6 +89,8 @@ export async function updateStaff(
     joining_date?: string
     commission_type?: 'none' | 'percentage' | 'fixed'
     commission_value?: number
+    /** Rupees as entered; stored as paise like every other amount. */
+    monthly_salary?: number
   }
 ): Promise<{ error?: string }> {
   const ctx = await getServerContext()
@@ -110,6 +115,7 @@ export async function updateStaff(
       ...(input.status       !== undefined && { status:          input.status }),
       ...(input.joining_date !== undefined && { joining_date:    input.joining_date || null }),
       ...(commission_scheme  !== undefined && { commission_scheme }),
+      ...(input.monthly_salary !== undefined && { monthly_salary: Math.round(input.monthly_salary * 100) }),
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

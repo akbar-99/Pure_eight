@@ -27,6 +27,7 @@ type LogRow = {
 const ACTION_ICONS: Record<string, string> = {
   create: '➕', update: '✏️', delete: '🗑️', login: '🔑', logout: '🚪',
   void: '❌', convert: '🔄', approve: '✅', reject: '❌', send: '📤', amend: '✏️',
+  pay: '💰', withdraw: '↩️',
 }
 
 function fmtAction(action: string) {

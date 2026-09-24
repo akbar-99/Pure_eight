@@ -66,6 +66,9 @@ export function StaffFormModal({ mode, staff, trigger }: StaffFormModalProps) {
     initScheme.type as 'none' | 'percentage' | 'fixed'
   )
   const [commValue,       setCommValue]       = useState(initScheme.value)
+  const [salary,          setSalary]          = useState(
+    staff?.monthly_salary ? String(staff.monthly_salary / 100) : ''
+  )
   const [customSkill,     setCustomSkill]     = useState('')
 
   function handleOpen() {
@@ -79,6 +82,7 @@ export function StaffFormModal({ mode, staff, trigger }: StaffFormModalProps) {
     setJoiningDate(staff?.joining_date ?? '')
     setCommType(s.type as 'none' | 'percentage' | 'fixed')
     setCommValue(s.value)
+    setSalary(staff?.monthly_salary ? String(staff.monthly_salary / 100) : '')
     setCustomSkill('')
     setError(null)
     setOpen(true)
@@ -119,6 +123,7 @@ export function StaffFormModal({ mode, staff, trigger }: StaffFormModalProps) {
         joining_date:     joiningDate || undefined,
         commission_type:  commType,
         commission_value: commType !== 'none' ? Number(commValue) : undefined,
+        monthly_salary:   salary === '' ? 0 : Number(salary),
       }
 
       const result =
@@ -287,6 +292,28 @@ export function StaffFormModal({ mode, staff, trigger }: StaffFormModalProps) {
                     onChange={e => setJoiningDate(e.target.value)}
                     className="w-full h-9 rounded-[4px] border border-silver bg-white px-3 text-sm text-charcoal focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
                   />
+                </div>
+
+                {/* Monthly salary */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="salary" className="text-sm font-medium text-charcoal">Monthly salary</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-grey">₹</span>
+                    <input
+                      id="salary"
+                      type="number"
+                      min="0"
+                      step="100"
+                      placeholder="e.g. 15000"
+                      value={salary}
+                      onChange={e => setSalary(e.target.value)}
+                      className="w-full h-9 rounded-[4px] border border-silver bg-white pl-7 pr-3 text-sm text-charcoal placeholder:text-grey focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
+                    />
+                  </div>
+                  <p className="text-xs text-grey">
+                    Fixed pay per month. Leave blank for staff paid on commission alone — a
+                    person may have both.
+                  </p>
                 </div>
 
                 {/* Commission */}

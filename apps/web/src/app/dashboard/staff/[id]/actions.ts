@@ -5,6 +5,7 @@ import { getServerContext } from '@/lib/context/server'
 import {
   parseScheme, commissionEarned, describeScheme, NO_COMMISSION,
 } from '@/lib/billing/commission'
+import { salaryForRange, salaryCoverageLabel } from '@/lib/billing/salary'
 import type { DateRange } from '@/app/dashboard/overview/actions'
 
 /**
@@ -27,6 +28,8 @@ export type StaffProfile = {
   skills:         string[]
   outletName:     string | null
   rate:           string
+  /** Fixed pay per month in paise. 0 when they are not on a salary. */
+  monthlySalary:  number
 }
 
 export type StaffService = {
@@ -67,6 +70,12 @@ export type StaffDetail = {
   net:        number   // ex tax — what commission is paid on
   tips:       number
   commission: number
+  /** Salary earned over the dates shown, by the day. */
+  salary:     number
+  /** "24 of 30 days" when the range is part of a month, else null. */
+  salaryNote: string | null
+  /** Salary plus commission — what the business owes them for the period. */
+  totalDue:   number
   services:   StaffService[]
   bills:      StaffBill[]
   /** Paid against this period — payments wholly inside the dates shown. */
@@ -75,7 +84,7 @@ export type StaffDetail = {
   outstanding: number
   /** Every payment ever made to them, newest first. */
   payments:   StaffPayment[]
-  /** False until the commission_payouts migration has been run. */
+  /** False until the staff_payouts table exists. */
   payoutsReady: boolean
   range:      DateRange
 }
@@ -102,7 +111,7 @@ export async function getStaffDetail(
 
   const { data: staff } = await admin
     .from('staff')
-    .select('id, full_name, role_title, mobile, status, employment_type, joining_date, skills, commission_scheme, outlet_id, outlets(name)')
+    .select('id, full_name, role_title, mobile, status, employment_type, joining_date, skills, commission_scheme, monthly_salary, outlet_id, outlets(name)')
     .eq('id', staffId)
     .is('deleted_at', null)
     .maybeSingle()
@@ -113,6 +122,7 @@ export async function getStaffDetail(
     id: string; full_name: string; role_title: string | null; mobile: string | null
     status: string; employment_type: string; joining_date: string | null
     skills: string[] | null; commission_scheme: unknown; outlet_id: string
+    monthly_salary: number | null
     outlets: { name: string } | null
   }
 
@@ -185,7 +195,7 @@ export async function getStaffDetail(
   // The whole history is listed, not just this period: a payment hidden by the
   // dates on screen would read as money never handed over.
   const payoutRes = await admin
-    .from('commission_payouts')
+    .from('staff_payouts')
     .select('id, period_from, period_to, amount, mode, notes, paid_at, users(full_name)')
     .eq('staff_id', staffId)
     .is('deleted_at', null)
@@ -214,6 +224,11 @@ export async function getStaffDetail(
   }))
 
   const commission = commissionEarned(scheme ?? NO_COMMISSION, { serviceNet: net, billCount: billMap.size })
+  const monthlySalary = s.monthly_salary ?? 0
+  const salary = salaryForRange(monthlySalary, range.from, range.to)
+  // Tips are the customer's money passed on, not pay owed by the business, so
+  // they are reported but never counted into what is due.
+  const totalDue = salary + commission
   const paid = payments.filter(p => p.inPeriod).reduce((t, p) => t + p.amount, 0)
 
   return {
@@ -228,6 +243,7 @@ export async function getStaffDetail(
       skills:         Array.isArray(s.skills) ? s.skills : [],
       outletName:     s.outlets?.name ?? null,
       rate:           describeScheme(scheme),
+      monthlySalary,
     },
     serviceCount: lines.reduce((t, l) => t + l.qty, 0),
     billCount:    billMap.size,
@@ -235,10 +251,13 @@ export async function getStaffDetail(
     net,
     tips,
     commission,
+    salary,
+    salaryNote: monthlySalary > 0 ? salaryCoverageLabel(range.from, range.to) : null,
+    totalDue,
     services,
     bills,
     paid,
-    outstanding: commission - paid,
+    outstanding: totalDue - paid,
     payments,
     payoutsReady,
     range,

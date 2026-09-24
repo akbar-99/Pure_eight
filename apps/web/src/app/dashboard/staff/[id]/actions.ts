@@ -45,6 +45,19 @@ export type StaffBill = {
   itemNames:    string[]
 }
 
+export type StaffPayment = {
+  id:       string
+  from:     string
+  to:       string
+  amount:   number
+  mode:     string
+  notes:    string | null
+  paidAt:   string
+  paidBy:   string | null
+  /** True once the payment falls wholly inside the period being viewed. */
+  inPeriod: boolean
+}
+
 export type StaffDetail = {
   profile:    StaffProfile
   /** Units of service performed across the period. */
@@ -56,6 +69,14 @@ export type StaffDetail = {
   commission: number
   services:   StaffService[]
   bills:      StaffBill[]
+  /** Paid against this period — payments wholly inside the dates shown. */
+  paid:       number
+  /** Commission earned less what has been paid for the same period. */
+  outstanding: number
+  /** Every payment ever made to them, newest first. */
+  payments:   StaffPayment[]
+  /** False until the commission_payouts migration has been run. */
+  payoutsReady: boolean
   range:      DateRange
 }
 
@@ -160,6 +181,41 @@ export async function getStaffDetail(
     }
   }
 
+  // ── What has been paid ──────────────────────────────────────────────────────
+  // The whole history is listed, not just this period: a payment hidden by the
+  // dates on screen would read as money never handed over.
+  const payoutRes = await admin
+    .from('commission_payouts')
+    .select('id, period_from, period_to, amount, mode, notes, paid_at, users(full_name)')
+    .eq('staff_id', staffId)
+    .is('deleted_at', null)
+    .order('paid_at', { ascending: false })
+
+  // The table arrives in a migration. Until it is run the page still works and
+  // simply shows nothing paid, rather than failing to load at all.
+  const payoutsReady = !payoutRes.error
+
+  type PayoutRow = {
+    id: string; period_from: string; period_to: string; amount: number
+    mode: string; notes: string | null; paid_at: string
+    users: { full_name: string | null } | null
+  }
+
+  const payments: StaffPayment[] = ((payoutRes.data ?? []) as unknown as PayoutRow[]).map(r => ({
+    id:       r.id,
+    from:     r.period_from,
+    to:       r.period_to,
+    amount:   r.amount,
+    mode:     r.mode,
+    notes:    r.notes,
+    paidAt:   r.paid_at,
+    paidBy:   r.users?.full_name ?? null,
+    inPeriod: r.period_from >= range.from && r.period_to <= range.to,
+  }))
+
+  const commission = commissionEarned(scheme ?? NO_COMMISSION, { serviceNet: net, billCount: billMap.size })
+  const paid = payments.filter(p => p.inPeriod).reduce((t, p) => t + p.amount, 0)
+
   return {
     profile: {
       id:             s.id,
@@ -178,9 +234,13 @@ export async function getStaffDetail(
     revenue,
     net,
     tips,
-    commission:   commissionEarned(scheme ?? NO_COMMISSION, { serviceNet: net, billCount: billMap.size }),
+    commission,
     services,
     bills,
+    paid,
+    outstanding: commission - paid,
+    payments,
+    payoutsReady,
     range,
   }
 }

@@ -9,6 +9,7 @@ import { DateRangePicker } from '@/app/dashboard/overview/date-range-picker'
 import { fmtCurrency, cn } from '@/lib/utils'
 import { ArrowLeft, Scissors, Receipt } from 'lucide-react'
 import { getStaffDetail, type StaffDetail } from './actions'
+import { CommissionCard } from './commission-card'
 import type { DateRange } from '@/app/dashboard/overview/actions'
 
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'default'> = {
@@ -41,6 +42,8 @@ export function StaffDetailShell({ initial }: { initial: StaffDetail }) {
       if (next) setData(next)
     })
   }
+
+  const reload = () => load(range)
 
   const p = data.profile
   const maxSvc = data.services[0]?.revenue ?? 0
@@ -109,11 +112,13 @@ export function StaffDetailShell({ initial }: { initial: StaffDetail }) {
         </div>
 
         {p.rate !== '—' && (
-          <p className="text-xs text-grey mb-5">
+          <p className="text-xs text-grey mb-3">
             Commission is <span className="text-charcoal">{p.rate}</span> of{' '}
             <span className="text-charcoal font-mono">{fmtCurrency(data.net)}</span> of service value, excluding tax.
           </p>
         )}
+
+        <CommissionCard data={data} onChange={reload} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* What they performed */}

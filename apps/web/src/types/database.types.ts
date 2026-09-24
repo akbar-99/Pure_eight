@@ -894,6 +894,73 @@ export type Database = {
           },
         ]
       }
+      commission_payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          deleted_at: string | null
+          id: string
+          mode: string
+          notes: string | null
+          outlet_id: string
+          paid_at: string
+          paid_by: string | null
+          period_from: string
+          period_to: string
+          staff_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          mode: string
+          notes?: string | null
+          outlet_id: string
+          paid_at?: string
+          paid_by?: string | null
+          period_from: string
+          period_to: string
+          staff_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          mode?: string
+          notes?: string | null
+          outlet_id?: string
+          paid_at?: string
+          paid_by?: string | null
+          period_from?: string
+          period_to?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_payouts_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_payouts_paid_by_fkey"
+            columns: ["paid_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commission_payouts_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           anniversary: string | null

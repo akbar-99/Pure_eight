@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { istNow } from '@/lib/utils'
 import { Download, RefreshCw } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -189,7 +190,14 @@ export function ReportsShell({ initial }: Props) {
                 {staffPerf.map(s => (
                   <div key={s.staffId}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-charcoal truncate max-w-[45%]">{s.name}</span>
+                      {/* The range travels with the link, so the detail page opens
+                          on the same dates the figure was read from. */}
+                      <Link
+                        href={`/dashboard/staff/${s.staffId}?from=${range.from}&to=${range.to}`}
+                        className="text-xs font-medium text-charcoal truncate max-w-[45%] hover:underline underline-offset-2 decoration-silver"
+                      >
+                        {s.name}
+                      </Link>
                       <div className="flex items-center gap-2 text-xs text-grey">
                         <span>{s.bills} bills</span>
                         {s.tips > 0 && <span className="text-success">+{fmtRs(s.tips)} tips</span>}

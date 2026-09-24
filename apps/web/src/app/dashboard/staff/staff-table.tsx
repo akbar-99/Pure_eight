@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Pencil, Trash2, MoreHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Avatar } from '@/components/ui/avatar'
@@ -148,7 +149,10 @@ export function StaffTable({ staff }: StaffTableProps) {
                   <div className="flex items-center gap-2.5">
                     <Avatar name={s.full_name} size="sm" />
                     <div>
-                      <p className="font-medium text-charcoal">{s.full_name}</p>
+                      <Link href={`/dashboard/staff/${s.id}`}
+                        className="font-medium text-charcoal hover:underline underline-offset-2 decoration-silver">
+                        {s.full_name}
+                      </Link>
                       {s.mobile && (
                         <p className="text-xs text-grey font-mono">{s.mobile}</p>
                       )}

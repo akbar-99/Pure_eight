@@ -13,6 +13,7 @@ function todayRange(): DateRange {
   return { preset: 'today', from: today, to: today }
 }
 import { StatCards }       from './stat-cards'
+import { BranchBreakdown } from './branch-breakdown'
 import { SecondaryKpis }   from './secondary-kpis'
 import { RevenueChart }    from './revenue-chart'
 import { PaymentModes }    from './payment-modes'
@@ -100,6 +101,11 @@ export function DashboardShell({ initial }: DashboardShellProps) {
 
       {/* Secondary KPI strip */}
       <SecondaryKpis current={data.current} />
+
+      {/* How each branch did — HQ only; an outlet user has just the one. */}
+      {data.branches && data.branches.length > 1 && (
+        <BranchBreakdown branches={data.branches} />
+      )}
 
       {/* Revenue trend chart */}
       <RevenueChart daily={data.daily} />

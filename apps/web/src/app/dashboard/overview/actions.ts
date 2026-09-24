@@ -72,6 +72,14 @@ export type ActivityItem = {
   ts:      string
 }
 
+export type BranchPoint = {
+  outletId:  string
+  name:      string
+  revenue:   number
+  billCount: number
+  avgBill:   number
+}
+
 export type DashboardData = {
   current:      StatSnapshot
   previous:     StatSnapshot
@@ -80,6 +88,8 @@ export type DashboardData = {
   topStaff:     TopStaff[]
   recentActivity: ActivityItem[]
   paymentModes: PaymentMode[]
+  /** Per-branch split. Only present for HQ, which is the only scope with more than one. */
+  branches?:    BranchPoint[]
   isHqUser:     boolean
   outletId:     string
   range:        DateRange
@@ -385,9 +395,54 @@ export async function fetchDashboardData(
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, 12)
 
+  // ── Per branch ──────────────────────────────────────────────────────────────
+  // Only for HQ: an outlet user has one branch and a breakdown of one is noise.
+  // Branches that took nothing are still listed — a franchise sitting at zero is
+  // the most useful thing this card can tell a franchisor.
+  let branches: BranchPoint[] | undefined
+  if (ctx?.isHqUser && scope.outletIds.length > 0) {
+    const [branchBillsRes, branchOutletsRes] = await Promise.all([
+      supabase
+        .from('bills')
+        .select('outlet_id, total')
+        .in('outlet_id', scope.outletIds)
+        .eq('status', 'closed')
+        .gte('created_at', bounds.start)
+        .lte('created_at', bounds.end)
+        .is('deleted_at', null),
+      supabase
+        .from('outlets')
+        .select('id, name')
+        .in('id', scope.outletIds)
+        .is('deleted_at', null),
+    ])
+
+    const agg = new Map<string, { revenue: number; billCount: number }>()
+    for (const b of (branchBillsRes.data ?? []) as { outlet_id: string; total: number }[]) {
+      const cur = agg.get(b.outlet_id) ?? { revenue: 0, billCount: 0 }
+      cur.revenue   += b.total
+      cur.billCount += 1
+      agg.set(b.outlet_id, cur)
+    }
+
+    branches = ((branchOutletsRes.data ?? []) as { id: string; name: string }[])
+      .map(o => {
+        const v = agg.get(o.id) ?? { revenue: 0, billCount: 0 }
+        return {
+          outletId:  o.id,
+          name:      o.name,
+          revenue:   v.revenue,
+          billCount: v.billCount,
+          avgBill:   v.billCount > 0 ? Math.round(v.revenue / v.billCount) : 0,
+        }
+      })
+      .sort((a, b) => b.revenue - a.revenue)
+  }
+
   return {
     current, previous, daily,
     topServices, topStaff, recentActivity, paymentModes,
+    branches,
     isHqUser: ctx?.isHqUser ?? false,
     outletId: ctx?.outletId ?? '',
     range: resolved,

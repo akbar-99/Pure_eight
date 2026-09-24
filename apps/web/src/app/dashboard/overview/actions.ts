@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { istNow } from '@/lib/utils'
 import { getServerContext }  from '@/lib/context/server'
 import { resolveScope }      from '@/lib/context/scope'
+import { getRoyaltySettings, activeRule, applyRule, describeRule } from '@/lib/billing/royalty'
 
 // ── Date range types ──────────────────────────────────────────────────────────
 
@@ -78,6 +79,8 @@ export type BranchPoint = {
   revenue:   number
   billCount: number
   avgBill:   number
+  /** What HQ earns on this branch's takings under the rule in force. */
+  royalty:   number
 }
 
 export type DashboardData = {
@@ -90,6 +93,8 @@ export type DashboardData = {
   paymentModes: PaymentMode[]
   /** Per-branch split. Only present for HQ, which is the only scope with more than one. */
   branches?:    BranchPoint[]
+  /** How the royalty rate reads, e.g. "7%". Present whenever branches is. */
+  royaltyRate?: string
   isHqUser:     boolean
   outletId:     string
   range:        DateRange
@@ -400,7 +405,13 @@ export async function fetchDashboardData(
   // Branches that took nothing are still listed — a franchise sitting at zero is
   // the most useful thing this card can tell a franchisor.
   let branches: BranchPoint[] | undefined
+  let royaltyRate: string | undefined
   if (ctx?.isHqUser && scope.outletIds.length > 0) {
+    // The rule set on the Royalty screen, so this agrees with Franchise Hub.
+    const settings = await getRoyaltySettings(ctx.tenantId)
+    const rule     = activeRule(settings.rules, istTodayStr())
+    royaltyRate    = describeRule(rule)
+
     const [branchBillsRes, branchOutletsRes] = await Promise.all([
       supabase
         .from('bills')
@@ -434,6 +445,7 @@ export async function fetchDashboardData(
           revenue:   v.revenue,
           billCount: v.billCount,
           avgBill:   v.billCount > 0 ? Math.round(v.revenue / v.billCount) : 0,
+          royalty:   rule ? applyRule(rule, v.revenue).royalty : 0,
         }
       })
       .sort((a, b) => b.revenue - a.revenue)
@@ -443,6 +455,7 @@ export async function fetchDashboardData(
     current, previous, daily,
     topServices, topStaff, recentActivity, paymentModes,
     branches,
+    royaltyRate,
     isHqUser: ctx?.isHqUser ?? false,
     outletId: ctx?.outletId ?? '',
     range: resolved,

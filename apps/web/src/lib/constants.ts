@@ -88,6 +88,7 @@ export const NAV_ITEMS = [
 
 export const HQ_ONLY_NAV_ITEMS = [
   { href: "/dashboard/franchise-hub",  label: "Franchise Hub",    icon: "Building2"      },
+  { href: "/dashboard/franchise-hub/royalty", label: "Royalty",    icon: "Percent"        },
   { href: "/dashboard/multi-location", label: "Multi-Location",   icon: "MapPin"         },
   { href: "/dashboard/audits",         label: "Audits",           icon: "ClipboardCheck" },
   { href: "/dashboard/training",       label: "Training",         icon: "BookOpen"       },

@@ -5,16 +5,23 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRoyaltySettings, activeRule, applyRule, describeRule } from "@/lib/billing/royalty";
+import { istToday } from "@/lib/utils";
 import { fmtDate } from "@/lib/utils";
-import { Building2, Plus } from "lucide-react";
+import { Building2, Plus, Percent } from "lucide-react";
 import { getServerContext } from "@/lib/context/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AddFranchiseeModal } from "./add-franchisee-modal";
 
-const ROYALTY_RATE = 0.07
 
-async function getFranchiseMetrics() {
+async function getFranchiseMetrics(hqTenantId: string) {
+  // The rule set on the Royalty screen, not a rate hardcoded here. The two had
+  // drifted: changing the rate there left this page still charging 7%.
+  const settings = await getRoyaltySettings(hqTenantId)
+  const rule     = activeRule(settings.rules, istToday())
+  const rateLabel = describeRule(rule)
+
   const supabase = createAdminClient()
 
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
@@ -81,6 +88,7 @@ async function getFranchiseMetrics() {
     customerCount: number
     staffCount: number
     royalty: number
+    marketing: number
   }
 
   const franchiseeRows: FranchiseeRow[] = franchisees.map(f => {
@@ -99,23 +107,29 @@ async function getFranchiseMetrics() {
     return {
       id: f.id, name: f.name, created_at: f.created_at,
       outlets: fOutlets, revenue, billCount, apptCount,
-      customerCount, staffCount, royalty: Math.round(revenue * ROYALTY_RATE)
+      customerCount, staffCount,
+      royalty: rule ? applyRule(rule, revenue).royalty : 0,
+      marketing: rule ? applyRule(rule, revenue).marketing : 0,
     }
   })
 
   const netRevenue   = franchiseeRows.reduce((s, f) => s + f.revenue, 0)
-  const netRoyalty   = Math.round(netRevenue * ROYALTY_RATE)
+  // Summed per franchisee rather than taken on the network total: a tiered or
+  // fixed-fee rule does not give the same answer when applied to the whole.
+  const netRoyalty   = franchiseeRows.reduce((s, f) => s + f.royalty, 0)
+  const netMarketing = franchiseeRows.reduce((s, f) => s + f.marketing, 0)
   const netBills     = franchiseeRows.reduce((s, f) => s + f.billCount, 0)
   const totalOutlets = outlets.length
 
-  return { franchiseeRows, netRevenue, netRoyalty, netBills, totalOutlets }
+  return { franchiseeRows, netRevenue, netRoyalty, netMarketing, netBills, totalOutlets, rateLabel }
 }
 
 export default async function FranchiseHubPage() {
   const ctx = await getServerContext()
   if (!ctx || !ctx.isHqUser) redirect('/dashboard/overview')
 
-  const { franchiseeRows, netRevenue, netRoyalty, netBills, totalOutlets } = await getFranchiseMetrics()
+  const { franchiseeRows, netRevenue, netRoyalty, netMarketing, netBills, totalOutlets, rateLabel } =
+    await getFranchiseMetrics(ctx.tenantId)
 
   return (
     <div>
@@ -123,6 +137,14 @@ export default async function FranchiseHubPage() {
         title="Franchise Hub"
         subtitle="Network performance · Month to Date"
         actions={
+          <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/franchise-hub/royalty"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[4px] border border-silver bg-white text-xs font-medium text-charcoal hover:border-charcoal transition-colors"
+          >
+            <Percent className="h-3.5 w-3.5" />
+            Royalty Settings
+          </Link>
           <AddFranchiseeModal
             trigger={
               <Button size="sm">
@@ -131,13 +153,14 @@ export default async function FranchiseHubPage() {
               </Button>
             }
           />
+          </div>
         }
       />
 
       {/* Network KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard title="Network Revenue (MTD)" value={netRevenue}   format="currency" />
-        <KpiCard title="Royalty Due (7%)"       value={netRoyalty}  format="currency" />
+        <KpiCard title={`Royalty Due (${rateLabel})`} value={netRoyalty} format="currency" />
         <KpiCard title="Total Bills (MTD)"      value={netBills}    format="number" />
         <KpiCard title="Active Outlets"         value={totalOutlets} format="number" />
       </div>
@@ -175,7 +198,7 @@ export default async function FranchiseHubPage() {
                     <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Staff</th>
                     <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Bills</th>
                     <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Revenue</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Royalty (7%)</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Royalty ({rateLabel})</th>
                     <th className="text-right px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide">Customers</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-grey uppercase tracking-wide"></th>
                   </tr>

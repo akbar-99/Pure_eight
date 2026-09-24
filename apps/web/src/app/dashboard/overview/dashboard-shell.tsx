@@ -104,7 +104,7 @@ export function DashboardShell({ initial }: DashboardShellProps) {
 
       {/* How each branch did — HQ only; an outlet user has just the one. */}
       {data.branches && data.branches.length > 1 && (
-        <BranchBreakdown branches={data.branches} />
+        <BranchBreakdown branches={data.branches} royaltyRate={data.royaltyRate} />
       )}
 
       {/* Revenue trend chart */}

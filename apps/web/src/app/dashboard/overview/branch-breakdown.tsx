@@ -14,10 +14,15 @@ import type { BranchPoint } from './actions'
  * are listed too: a franchise sitting at zero is the most useful thing this
  * card can say.
  */
-export function BranchBreakdown({ branches }: { branches: BranchPoint[] }) {
-  const total = branches.reduce((s, b) => s + b.revenue, 0)
-  const max   = branches[0]?.revenue ?? 0
-  const idle  = branches.filter(b => b.billCount === 0)
+export function BranchBreakdown({ branches, royaltyRate }: {
+  branches: BranchPoint[]
+  royaltyRate?: string
+}) {
+  const total   = branches.reduce((s, b) => s + b.revenue, 0)
+  const royalty = branches.reduce((s, b) => s + b.royalty, 0)
+  const max     = branches[0]?.revenue ?? 0
+  const idle    = branches.filter(b => b.billCount === 0)
+  const showRoyalty = royaltyRate !== undefined && royaltyRate !== '—'
 
   return (
     <Card className="overflow-hidden p-0 mb-4">
@@ -26,9 +31,17 @@ export function BranchBreakdown({ branches }: { branches: BranchPoint[] }) {
           <p className="text-sm font-semibold text-charcoal">By Branch</p>
           <p className="text-xs text-grey mt-0.5">
             {branches.length} {branches.length === 1 ? 'branch' : 'branches'} · closed bills
+            {showRoyalty && ' · royalty due to HQ in green'}
           </p>
         </div>
-        <p className="text-sm font-semibold text-charcoal font-mono">{fmtCurrency(total)}</p>
+        <div className="text-right">
+          <p className="text-sm font-semibold text-charcoal font-mono">{fmtCurrency(total)}</p>
+          {showRoyalty && (
+            <p className="text-[11px] text-grey mt-0.5">
+              {fmtCurrency(royalty)} royalty at {royaltyRate}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="px-5 py-4 space-y-3">
@@ -52,6 +65,11 @@ export function BranchBreakdown({ branches }: { branches: BranchPoint[] }) {
                   <span className="font-semibold text-charcoal font-mono w-20 text-right">
                     {fmtCurrency(b.revenue)}
                   </span>
+                  {showRoyalty && (
+                    <span className="font-mono w-16 text-right text-success" title="Royalty due to HQ">
+                      {fmtCurrency(b.royalty)}
+                    </span>
+                  )}
                   <span className="w-9 text-right tabular-nums">{share}%</span>
                 </span>
               </div>

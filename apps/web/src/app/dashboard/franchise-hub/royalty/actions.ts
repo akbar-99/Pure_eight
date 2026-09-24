@@ -1,38 +1,18 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  applyRule, activeRule, DEFAULT_ROYALTY_SETTINGS,
+  type RoyaltyRule, type RoyaltySettings,
+} from '@/lib/billing/royalty'
 import { getServerContext } from '@/lib/context/server'
 import { revalidatePath } from 'next/cache'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type RoyaltyRuleType = 'flat_pct' | 'tiered_pct' | 'fixed_fee' | 'hybrid'
-
-export type RoyaltyTier = {
-  upTo:     number | null   // paise — null means unlimited
-  rate:     number           // percentage (e.g. 7 = 7%)
-}
-
-export type RoyaltyRule = {
-  id:           string
-  name:         string
-  type:         RoyaltyRuleType
-  flatPct?:     number          // for flat_pct and hybrid base
-  fixedFee?:    number          // paise — for fixed_fee and hybrid
-  tiers?:       RoyaltyTier[]   // for tiered_pct
-  effectiveFrom: string          // YYYY-MM-DD
-  effectiveTo?:  string          // YYYY-MM-DD or null (open-ended)
-  marketingPct?: number          // additional marketing fund % (on top of royalty)
-}
-
-export type InvoiceCycle = 'weekly' | 'monthly'
-
-export type RoyaltySettings = {
-  cycle:           InvoiceCycle
-  defaultRuleId?:  string        // applies to franchisees without custom rule
-  rules:           RoyaltyRule[]
-  marketingFund:   number         // total balance in paise
-}
+export type {
+  RoyaltyRuleType, RoyaltyTier, RoyaltyRule, InvoiceCycle, RoyaltySettings,
+} from '@/lib/billing/royalty'
 
 export type RoyaltyPreviewLine = {
   franchiseeId:   string
@@ -69,20 +49,6 @@ export type RoyaltyPageData = {
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_ROYALTY_SETTINGS: RoyaltySettings = {
-  cycle: 'monthly',
-  rules: [
-    {
-      id:           'default',
-      name:         'Standard 7%',
-      type:         'flat_pct',
-      flatPct:      7,
-      marketingPct: 2,
-      effectiveFrom: new Date().toISOString().slice(0, 10),
-    },
-  ],
-  marketingFund: 0,
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -93,39 +59,6 @@ function istBounds(from: string, to: string) {
   }
 }
 
-function applyRule(rule: RoyaltyRule, revenue: number): { royalty: number; marketing: number } {
-  let royalty = 0
-
-  if (rule.type === 'flat_pct' && rule.flatPct) {
-    royalty = Math.round(revenue * rule.flatPct / 100)
-  } else if (rule.type === 'fixed_fee' && rule.fixedFee) {
-    royalty = rule.fixedFee
-  } else if (rule.type === 'tiered_pct' && rule.tiers?.length) {
-    let remaining = revenue
-    let prev = 0
-    for (const tier of rule.tiers) {
-      const cap = tier.upTo != null ? tier.upTo : Infinity
-      const slab = Math.min(remaining, cap - prev)
-      if (slab <= 0) break
-      royalty += Math.round(slab * tier.rate / 100)
-      remaining -= slab
-      prev = tier.upTo ?? 0
-      if (remaining <= 0) break
-    }
-  } else if (rule.type === 'hybrid') {
-    // fixed fee + flat % on revenue above threshold
-    royalty = (rule.fixedFee ?? 0) + Math.round(revenue * (rule.flatPct ?? 0) / 100)
-  }
-
-  const marketing = Math.round(revenue * (rule.marketingPct ?? 0) / 100)
-  return { royalty, marketing }
-}
-
-function activeRule(rules: RoyaltyRule[], today: string): RoyaltyRule | undefined {
-  return rules
-    .filter(r => r.effectiveFrom <= today && (!r.effectiveTo || r.effectiveTo >= today))
-    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
-}
 
 // ── Fetch page data ───────────────────────────────────────────────────────────
 

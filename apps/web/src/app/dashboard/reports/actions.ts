@@ -3,6 +3,9 @@
 import { createAdminClient }  from '@/lib/supabase/admin'
 import { getServerContext }   from '@/lib/context/server'
 export type { DateRange } from '@/app/dashboard/overview/actions'
+import {
+  parseScheme, commissionEarned, describeScheme, NO_COMMISSION, type CommissionScheme,
+} from '@/lib/billing/commission'
 import type { DateRange }  from '@/app/dashboard/overview/actions'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -36,12 +39,17 @@ export type ServiceRow = {
 }
 
 export type StaffPerfRow = {
-  staffId:   string
-  name:      string
-  bills:     number
-  revenue:   number
-  avgBill:   number
-  tips:      number
+  staffId:    string
+  name:       string
+  bills:      number
+  revenue:    number
+  avgBill:    number
+  tips:       number
+  /** The rate as configured, e.g. "5%" — shown so the figure can be checked. */
+  rate:       string
+  /** Service value the rate is applied to: after discount, excluding tax. */
+  commissionBase: number
+  commission: number
 }
 
 export type PayModeRow = { mode: string; amount: number; count: number; pct: number }
@@ -103,20 +111,23 @@ export async function fetchReportData(range: DateRange): Promise<ReportData> {
   const linesRes = await outletFilter(
     admin
       .from('bills')
-      .select('id, bill_lines(item_name, qty, line_total, staff_id)')
+      .select('id, bill_lines(item_name, qty, line_total, tax_value, staff_id)')
       .eq('status', 'closed')
       .gte('created_at', start).lte('created_at', end)
       .is('deleted_at', null)
   )
-  type BillWithLines = { id: string; bill_lines: { item_name: string; qty: number; line_total: number; staff_id: string | null }[] }
+  type BillWithLines = { id: string; bill_lines: { item_name: string; qty: number; line_total: number; tax_value: number; staff_id: string | null }[] }
   const billsWithLines = (linesRes.data ?? []) as BillWithLines[]
 
   // ── 3. Staff names ────────────────────────────────────────────────────────
   const staffRes = await outletFilter(
-    admin.from('staff').select('id, full_name').is('deleted_at', null)
+    admin.from('staff').select('id, full_name, commission_scheme').is('deleted_at', null)
   )
-  const staffNames = new Map<string, string>(
-    ((staffRes.data ?? []) as { id: string; full_name: string }[]).map(s => [s.id, s.full_name])
+  type StaffRow = { id: string; full_name: string; commission_scheme: unknown }
+  const staffRows  = (staffRes.data ?? []) as StaffRow[]
+  const staffNames = new Map<string, string>(staffRows.map(s => [s.id, s.full_name]))
+  const staffSchemes = new Map<string, CommissionScheme>(
+    staffRows.map(s => [s.id, parseScheme(s.commission_scheme)])
   )
 
   // ── 4. Tips per staff from bills ──────────────────────────────────────────
@@ -194,24 +205,34 @@ export async function fetchReportData(range: DateRange): Promise<ReportData> {
     .slice(0, 15)
 
   // Staff performance
-  const staffMap = new Map<string, { bills: Set<string>; revenue: number }>()
+  // Only lines naming a staff member count. Product lines carry no staff, so a
+  // retail sale earns nobody commission — it is goods sold, not work done.
+  const staffMap = new Map<string, { bills: Set<string>; revenue: number; net: number }>()
   for (const b of billsWithLines) {
     for (const l of b.bill_lines) {
       if (!l.staff_id) continue
-      const cur = staffMap.get(l.staff_id) ?? { bills: new Set(), revenue: 0 }
-      cur.bills.add(b.id); cur.revenue += l.line_total
+      const cur = staffMap.get(l.staff_id) ?? { bills: new Set(), revenue: 0, net: 0 }
+      cur.bills.add(b.id)
+      cur.revenue += l.line_total
+      cur.net     += l.line_total - l.tax_value
       staffMap.set(l.staff_id, cur)
     }
   }
   const staffPerf: StaffPerfRow[] = [...staffMap.entries()]
-    .map(([sid, v]) => ({
-      staffId: sid,
-      name:    staffNames.get(sid) ?? `Staff ${sid.slice(0, 6)}`,
-      bills:   v.bills.size,
-      revenue: v.revenue,
-      avgBill: v.bills.size > 0 ? Math.round(v.revenue / v.bills.size) : 0,
-      tips:    staffTipsMap.get(sid) ?? 0,
-    }))
+    .map(([sid, v]) => {
+      const scheme = staffSchemes.get(sid) ?? NO_COMMISSION
+      return {
+        staffId: sid,
+        name:    staffNames.get(sid) ?? `Staff ${sid.slice(0, 6)}`,
+        bills:   v.bills.size,
+        revenue: v.revenue,
+        avgBill: v.bills.size > 0 ? Math.round(v.revenue / v.bills.size) : 0,
+        tips:    staffTipsMap.get(sid) ?? 0,
+        rate:            describeScheme(scheme),
+        commissionBase:  v.net,
+        commission:      commissionEarned(scheme, { serviceNet: v.net, billCount: v.bills.size }),
+      }
+    })
     .sort((a, b) => b.revenue - a.revenue)
 
   // Payment modes
@@ -267,12 +288,15 @@ export async function exportServiceCSV(range: DateRange): Promise<string> {
 export async function exportStaffCSV(range: DateRange): Promise<string> {
   const data = await fetchReportData(range)
   const rows = [
-    ['Staff', 'Bills', 'Revenue (₹)', 'Avg Bill (₹)', 'Tips (₹)'],
+    ['Staff', 'Bills', 'Revenue (₹)', 'Avg Bill (₹)', 'Tips (₹)', 'Rate', 'Commission Base (₹)', 'Commission (₹)'],
     ...data.staffPerf.map(s => [
       s.name, s.bills,
       (s.revenue / 100).toFixed(2),
       (s.avgBill  / 100).toFixed(2),
       (s.tips     / 100).toFixed(2),
+      s.rate,
+      (s.commissionBase / 100).toFixed(2),
+      (s.commission     / 100).toFixed(2),
     ]),
   ]
   return rows.map(r => r.join(',')).join('\n')

@@ -199,8 +199,27 @@ export function ReportsShell({ initial }: Props) {
                     <div className="h-1.5 bg-offwhite rounded-full overflow-hidden">
                       <div className="h-full bg-black rounded-full" style={{ width: `${maxStaff > 0 ? Math.round(s.revenue / maxStaff * 100) : 0}%` }} />
                     </div>
+                    {/* What they have earned on that work. The rate is shown beside
+                        it so the figure can be checked without opening their record. */}
+                    <div className="flex items-center justify-between mt-1 text-[11px]">
+                      <span className="text-grey">
+                        Commission{s.rate !== '—' && <span className="text-silver"> · {s.rate} of {fmtRs(s.commissionBase)} ex-tax</span>}
+                      </span>
+                      {s.rate === '—' ? (
+                        <span className="text-grey">No rate set</span>
+                      ) : (
+                        <span className="font-semibold text-success font-mono">{fmtRs(s.commission)}</span>
+                      )}
+                    </div>
                   </div>
                 ))}
+
+                <div className="flex items-center justify-between pt-3 mt-1 border-t border-pearl text-xs">
+                  <span className="font-medium text-charcoal">Total commission</span>
+                  <span className="font-semibold text-charcoal font-mono">
+                    {fmtRs(staffPerf.reduce((t, s) => t + s.commission, 0))}
+                  </span>
+                </div>
               </div>
             )}
           </div>

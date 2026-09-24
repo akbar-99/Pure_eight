@@ -3,7 +3,7 @@ import type { ServerContext } from '@/lib/context/server'
 import { recordAudit } from '@/lib/audit/log'
 import { istToday } from '@/lib/utils'
 import {
-  computeBillTotals, computeLineTotals, recoverBillDiscount, pointsEarnedOn,
+  computeBillTotals, recoverBillDiscount, pointsEarnedOn,
 } from '@/lib/billing/totals'
 
 /**
@@ -241,8 +241,10 @@ export async function performAmendment(ctx: ServerContext, input: AmendInput): P
   await admin.from('bill_lines').delete().eq('bill_id', input.billId)
 
   const { error: linesError } = await admin.from('bill_lines').insert(
-    input.lines.map(l => {
-      const c = computeLineTotals(l)
+    // Taken from the computed bill rather than recomputed, so each line keeps
+    // its share of the bill-level discount and the tax charged on it.
+    input.lines.map((l, i) => {
+      const c = totals.lines[i]
       return {
         bill_id:        input.billId,
         item_type:      l.type,
@@ -252,7 +254,7 @@ export async function performAmendment(ctx: ServerContext, input: AmendInput): P
         qty:            l.qty,
         unit_price:     l.unitPrice,
         discount_pct:   l.discountPct,
-        discount_value: c.discountValue,
+        discount_value: c.discountValue + c.billDiscountShare,
         tax_pct:        l.taxPct,
         tax_value:      c.taxValue,
         line_total:     c.lineTotal,

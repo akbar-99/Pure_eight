@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getServerContext, requireServerContext } from '@/lib/context/server'
+import { computeBillTotals } from '@/lib/billing/totals'
 
 interface LineItemInput {
   name: string
@@ -79,23 +80,18 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
 
     const billNumber = `PE-BDR-${String((count ?? 0) + 1).padStart(5, '0')}`
 
-    // 2. Compute line totals
-    const lineItems = input.lines.map((l) => {
-      const gross         = l.unitPrice * l.qty
-      const discountValue = Math.round(gross * (l.discountPct / 100))
-      const taxable       = gross - discountValue
-      const taxValue      = Math.round(taxable * (l.taxPct / 100))
-      const lineTotal     = taxable + taxValue
-      return { ...l, discountValue, taxValue, lineTotal }
+    // 2. Compute the bill.
+    //
+    // Shared with the till and with amendment, so all three agree — and so the
+    // bill-level discount comes off before tax in every one of them.
+    const totals = computeBillTotals(input.lines, {
+      billDiscount:  input.discountAmount,
+      loyaltyPoints: input.loyaltyPointsRedeemed,
+      tip:           input.tip,
     })
-
-    const subtotal           = lineItems.reduce((s, l) => s + l.unitPrice * l.qty - l.discountValue, 0)
-    const lineDiscountTotal  = lineItems.reduce((s, l) => s + l.discountValue, 0)
-    const taxValue           = lineItems.reduce((s, l) => s + l.taxValue, 0)
-    const loyaltyDiscount    = input.loyaltyPointsRedeemed * 100  // 1pt = ₹1 = 100 paise
-    const total              = subtotal + taxValue - input.discountAmount - loyaltyDiscount + input.tip
-    // discount_value in the DB row = line-level discounts + bill-level discount
-    const totalDiscountValue = lineDiscountTotal + input.discountAmount + loyaltyDiscount
+    const lineItems = input.lines.map((l, i) => ({ ...l, ...totals.lines[i] }))
+    const { subtotal, taxValue, total } = totals
+    const totalDiscountValue = totals.discountValue
 
     // 3. Fetch outlet name for the receipt
     const { data: outlet } = await supabase
@@ -139,7 +135,7 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
         qty:            l.qty,
         unit_price:     l.unitPrice,
         discount_pct:   l.discountPct,
-        discount_value: l.discountValue,
+        discount_value: l.discountValue + l.billDiscountShare,
         tax_pct:        l.taxPct,
         tax_value:      l.taxValue,
         line_total:     l.lineTotal,

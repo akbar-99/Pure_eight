@@ -9,6 +9,7 @@ import { Badge }           from '@/components/ui/badge'
 import { Separator }       from '@/components/ui/separator'
 import { Avatar }          from '@/components/ui/avatar'
 import { cn, fmtCurrency } from '@/lib/utils'
+import { computeBillTotals, pointsEarnedOn } from '@/lib/billing/totals'
 import { PAYMENT_MODES as ALL_PAYMENT_MODES } from '@/lib/constants'
 import { Search, Plus, X, PlusCircle } from 'lucide-react'
 import { checkoutBill, getServices, getStaff, getProducts, searchCustomers } from './actions'
@@ -132,18 +133,27 @@ export default function POSPage() {
   }
 
   // ─── Computed totals ────────────────────────────────────────────────────────
-  const subtotal       = lines.reduce((s, l) => s + l.unitPrice * l.qty - computeLine(l).discountValue, 0)
-  const lineTax        = lines.reduce((s, l) => s + computeLine(l).taxValue, 0)
+  // The same function checkout and amendment use, so what the cashier is shown
+  // is what the bill will actually say.
+  const preDiscountSubtotal = lines.reduce((s, l) => s + l.unitPrice * l.qty - computeLine(l).discountValue, 0)
 
   const discountAmount: number = (() => {
     if (discountType === 'none') return 0
-    if (discountType === 'value') return Math.round(discountInput * 100)           // rupees → paise
-    return Math.round(subtotal * (discountInput / 100))                             // %
+    if (discountType === 'value') return Math.round(discountInput * 100)              // rupees → paise
+    return Math.round(preDiscountSubtotal * (discountInput / 100))                    // %
   })()
 
-  const loyaltyDiscount = loyaltyRedeem * 100     // 1pt = ₹1 = 100 paise
-  const grandTotal      = Math.max(0, subtotal + lineTax - discountAmount - loyaltyDiscount + tip)
-  const pointsToEarn    = Math.floor(grandTotal / 10000)
+  const totals = computeBillTotals(lines, {
+    billDiscount:  discountAmount,
+    loyaltyPoints: loyaltyRedeem,
+    tip,
+  })
+
+  const subtotal        = totals.subtotal
+  const lineTax         = totals.taxValue
+  const loyaltyDiscount = totals.loyaltyDiscount
+  const grandTotal      = totals.total
+  const pointsToEarn    = pointsEarnedOn(grandTotal)
 
   // Service lines still missing the staff member who performed them. Products are
   // exempt: they are goods sold, not work done by anyone.

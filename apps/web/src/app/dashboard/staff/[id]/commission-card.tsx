@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { cn, fmtCurrency } from '@/lib/utils'
+import { cn, fmtCurrency, fmtCalendarDay } from '@/lib/utils'
 import { X, Check, Wallet, Undo2 } from 'lucide-react'
 import { PAYMENT_MODES as ALL_PAYMENT_MODES } from '@/lib/constants'
 import { recordCommissionPayout, withdrawCommissionPayout } from './payout-actions'
@@ -16,11 +16,6 @@ const QUICK_MODES = ['cash', 'upi', 'bank_transfer'] as const
 const OTHER_MODES = PAYMENT_MODES.filter(m => !QUICK_MODES.includes(m.value as typeof QUICK_MODES[number]))
 
 const modeLabel = (v: string) => PAYMENT_MODES.find(m => m.value === v)?.label ?? v
-
-function fmtDay(ymd: string) {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 function fmtWhen(iso: string) {
   return new Date(iso).toLocaleString('en-IN', {
@@ -55,7 +50,7 @@ export function CommissionCard({ data, onChange }: { data: StaffDetail; onChange
           <div>
             <p className="text-sm font-semibold text-charcoal">Commission</p>
             <p className="text-xs text-grey mt-0.5">
-              {fmtDay(range.from)} – {fmtDay(range.to)}
+              {fmtCalendarDay(range.from)} – {fmtCalendarDay(range.to)}
             </p>
           </div>
 
@@ -115,7 +110,7 @@ export function CommissionCard({ data, onChange }: { data: StaffDetail; onChange
                   !p.inPeriod && 'opacity-55')}>
                   <span className="min-w-0">
                     <span className="text-charcoal">
-                      {fmtDay(p.from)} – {fmtDay(p.to)}
+                      {fmtCalendarDay(p.from)} – {fmtCalendarDay(p.to)}
                     </span>
                     <span className="text-grey"> · {modeLabel(p.mode)} · {fmtWhen(p.paidAt)}</span>
                     {p.paidBy && <span className="text-grey"> · by {p.paidBy}</span>}
@@ -201,7 +196,7 @@ function PayoutModal({ data, onClose, onDone }: {
           <div>
             <h2 className="text-base font-semibold text-charcoal">Pay {profile.name}</h2>
             <p className="text-xs text-grey mt-0.5">
-              Commission for {fmtDay(range.from)} – {fmtDay(range.to)}
+              Commission for {fmtCalendarDay(range.from)} – {fmtCalendarDay(range.to)}
             </p>
           </div>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">

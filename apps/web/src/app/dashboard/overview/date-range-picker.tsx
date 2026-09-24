@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { istNow } from '@/lib/utils'
+import { istNow, fmtCalendarDay } from '@/lib/utils'
 import type { DateRange, DateRangePreset } from './actions'
 
 interface DateRangePickerProps {
@@ -64,12 +64,9 @@ const PRESETS: { label: string; value: DateRangePreset }[] = [
 ]
 
 function fmtDisplay(range: DateRange) {
-  if (range.from === range.to) {
-    return new Date(range.from).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-  }
-  const f = new Date(range.from).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  const t = new Date(range.to).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-  return `${f} – ${t}`
+  if (range.from === range.to) return fmtCalendarDay(range.from)
+  const f = fmtCalendarDay(range.from, { day: 'numeric', month: 'short' })
+  return `${f} – ${fmtCalendarDay(range.to)}`
 }
 
 export function DateRangePicker({ value, onChange, disabled }: DateRangePickerProps) {

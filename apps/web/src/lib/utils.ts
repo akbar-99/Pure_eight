@@ -42,6 +42,23 @@ export function fmtDate(date: string | Date, fmt = "dd MMM yyyy"): string {
   return format(new Date(date), fmt);
 }
 
+/**
+ * Formats a plain calendar day, 'YYYY-MM-DD', as itself.
+ *
+ * `new Date('2026-09-01')` is midnight **UTC**, which in any timezone behind
+ * UTC prints as the day before — a date range starting on 1 September was
+ * labelled "31 Aug". A calendar day has no time or zone attached, so it is
+ * built from its parts and left alone.
+ */
+export function fmtCalendarDay(
+  ymd: string,
+  opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" },
+): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  return new Date(y, m - 1, d).toLocaleDateString("en-IN", opts);
+}
+
 export function fmtRelative(date: string | Date): string {
   return formatDistanceToNow(new Date(date), { addSuffix: true });
 }

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/empty-state'
-import { fmtCurrency, istToday } from '@/lib/utils'
+import { fmtCurrency, istToday, fmtCalendarDay } from '@/lib/utils'
 import { Search, Receipt, Ban, X, ChevronLeft, ChevronRight, Pencil, History } from 'lucide-react'
 import { AmendBillModal } from './amend-bill-modal'
 import { BillHistoryModal } from './bill-history-modal'
@@ -20,12 +20,6 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'danger' | 'default
   closed: 'success',
   open:   'warning',
   void:   'danger',
-}
-
-/** A date input's 'YYYY-MM-DD', read as the plain calendar day it stands for. */
-function fmtDay(ymd: string) {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 /**
@@ -119,9 +113,9 @@ export function BillsShell({ initial, letterhead }: { initial: BillsPageData; le
   /** Prints on the document, so whoever reads it knows which bills it covers. */
   function describeFilter() {
     const parts: string[] = []
-    if (from && to)   parts.push(`${fmtDay(from)} – ${fmtDay(to)}`)
-    else if (from)    parts.push(`From ${fmtDay(from)}`)
-    else if (to)      parts.push(`Up to ${fmtDay(to)}`)
+    if (from && to)   parts.push(`${fmtCalendarDay(from)} – ${fmtCalendarDay(to)}`)
+    else if (from)    parts.push(`From ${fmtCalendarDay(from)}`)
+    else if (to)      parts.push(`Up to ${fmtCalendarDay(to)}`)
     else              parts.push('All dates')
     if (status !== 'all') parts.push(`${status} only`)
     if (search.trim())    parts.push(`matching “${search.trim()}”`)

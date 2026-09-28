@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient }  from '@/lib/supabase/admin'
+import { billRevenue, sumRevenue } from '@/lib/billing/revenue'
 import { getServerContext }   from '@/lib/context/server'
 import { resolveScope }       from '@/lib/context/scope'
 import { allocateTip }        from '@/lib/billing/tips'
@@ -188,7 +189,7 @@ export async function fetchReportData(range: DateRange): Promise<ReportData> {
   // ── Aggregations ──────────────────────────────────────────────────────────
 
   // Summary
-  const totalRevenue   = bills.reduce((s, b) => s + b.total, 0)
+  const totalRevenue   = sumRevenue(bills)
   const totalDiscounts = bills.reduce((s, b) => s + b.discount_value, 0)
   const totalTips      = bills.reduce((s, b) => s + b.tip_value, 0)
   const billCount      = bills.length
@@ -205,7 +206,7 @@ export async function fetchReportData(range: DateRange): Promise<ReportData> {
     const k   = ist.toISOString().slice(0, 10)
     const row = dayMap.get(k)
     if (row) {
-      row.billCount++; row.revenue += b.total
+      row.billCount++; row.revenue += billRevenue(b)
       row.discounts += b.discount_value; row.tips += b.tip_value
     }
   }

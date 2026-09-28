@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/shared/page-header";
+import { billRevenue, sumRevenue } from '@/lib/billing/revenue'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ async function getFranchiseMetrics(hqTenantId: string) {
     supabase.from('tenants').select('id,name,type,created_at,settings').eq('type','franchisee').is('deleted_at',null).order('name'),
     supabase.from('outlets').select('id,name,tenant_id,city,state,status,created_at,phone,email').is('deleted_at',null).order('name'),
     supabase.from('staff').select('id,outlet_id').eq('status','active').is('deleted_at',null),
-    supabase.from('bills').select('outlet_id,total,status').gte('created_at',startOfMonth).lt('created_at',now).is('deleted_at',null).neq('status','void'),
+    supabase.from('bills').select('outlet_id,total,tip_value,status').gte('created_at',startOfMonth).lt('created_at',now).is('deleted_at',null).neq('status','void'),
     supabase.from('appointments').select('outlet_id,status').gte('starts_at',startOfMonth).lt('starts_at',now).is('deleted_at',null),
     supabase.from('customers').select('id,last_visited_outlet_id,loyalty_tier').is('deleted_at',null),
   ])
@@ -60,7 +61,7 @@ async function getFranchiseMetrics(hqTenantId: string) {
   }
   for (const b of bills) {
     const m = outletMetrics.get(b.outlet_id)
-    if (m && b.status === 'closed') { m.revenue += b.total ?? 0; m.billCount++ }
+    if (m && b.status === 'closed') { m.revenue += billRevenue(b); m.billCount++ }
   }
   for (const a of appts) {
     const m = outletMetrics.get(a.outlet_id)

@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { billRevenue, sumRevenue } from '@/lib/billing/revenue'
 import { istNow } from '@/lib/utils'
 import { getServerContext }  from '@/lib/context/server'
 import { resolveScope }      from '@/lib/context/scope'
@@ -193,7 +194,7 @@ async function fetchSnapshot(
   const appts     = (apptsRes.data     ?? []) as ApptRow[]
   const loyalty   = (loyaltyRes.data   ?? []) as LoyaltyRow[]
 
-  const revenue         = closed.reduce((s, b) => s + (b.total ?? 0), 0)
+  const revenue         = sumRevenue(closed)
   const billCount       = closed.length
   const tipsValue       = closed.reduce((s, b) => s + (b.tip_value ?? 0), 0)
   const discountValue   = closed.reduce((s, b) => s + (b.discount_value ?? 0), 0)
@@ -259,14 +260,14 @@ export async function fetchDashboardData(
   const chartBillsRes = await outletFilter(
     supabase
       .from('bills')
-      .select('total, created_at, status')
+      .select('total, tip_value, created_at, status')
       .gte('created_at', bounds.start)
       .lte('created_at', bounds.end)
       .is('deleted_at', null)
       .neq('status', 'void')
   )
 
-  const chartBills = (chartBillsRes.data ?? []) as { total: number; created_at: string; status: string }[]
+  const chartBills = (chartBillsRes.data ?? []) as { total: number; tip_value: number; created_at: string; status: string }[]
 
   // Build per-day map between from → to
   const f = new Date(from); const t = new Date(to)
@@ -282,7 +283,7 @@ export async function fetchDashboardData(
     const ist = new Date(new Date(b.created_at).getTime() + 5.5 * 3600_000)
     const k   = ist.toISOString().slice(0, 10)
     const cur = dailyMap.get(k)
-    if (cur) dailyMap.set(k, { revenue: cur.revenue + b.total, bills: cur.bills + 1 })
+    if (cur) dailyMap.set(k, { revenue: cur.revenue + billRevenue(b), bills: cur.bills + 1 })
   }
   const daily: DailyPoint[] = [...dailyMap.entries()].map(([date, v]) => ({ date, ...v }))
 
@@ -415,7 +416,7 @@ export async function fetchDashboardData(
     const [branchBillsRes, branchOutletsRes] = await Promise.all([
       supabase
         .from('bills')
-        .select('outlet_id, total')
+        .select('outlet_id, total, tip_value')
         .in('outlet_id', scope.outletIds)
         .eq('status', 'closed')
         .gte('created_at', bounds.start)
@@ -429,9 +430,9 @@ export async function fetchDashboardData(
     ])
 
     const agg = new Map<string, { revenue: number; billCount: number }>()
-    for (const b of (branchBillsRes.data ?? []) as { outlet_id: string; total: number }[]) {
+    for (const b of (branchBillsRes.data ?? []) as { outlet_id: string; total: number; tip_value: number }[]) {
       const cur = agg.get(b.outlet_id) ?? { revenue: 0, billCount: 0 }
-      cur.revenue   += b.total
+      cur.revenue   += billRevenue(b)
       cur.billCount += 1
       agg.set(b.outlet_id, cur)
     }

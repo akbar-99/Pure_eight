@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { billRevenue, sumRevenue } from '@/lib/billing/revenue'
 import { getServerContext } from '@/lib/context/server'
 import { resolveScope } from '@/lib/context/scope'
 
@@ -97,7 +98,7 @@ function aggregateBills(bills: RawBill[], gran: TrendGranularity, from: string, 
     const k   = gran === 'day' ? ist.toISOString().slice(0, 10) : ist.toISOString().slice(0, 7)
     const row = map.get(k)
     if (row) {
-      row.billCount++; row.revenue += b.total
+      row.billCount++; row.revenue += billRevenue(b)
       row.discounts += b.discount_value; row.tips += b.tip_value
     }
   }
@@ -263,14 +264,14 @@ export async function fetchTrendData(
     const outletIds = [...outletMap.keys()]
     const hqBillsRes = outletIds.length > 0 ? await admin
       .from('bills')
-      .select('outlet_id, total')
+      .select('outlet_id, total, tip_value')
       .eq('status', 'closed')
       .in('outlet_id', outletIds)
       .gte('created_at', start).lte('created_at', end)
       .is('deleted_at', null) : { data: [] }
-    for (const b of (hqBillsRes.data ?? []) as { outlet_id: string; total: number }[]) {
+    for (const b of (hqBillsRes.data ?? []) as { outlet_id: string; total: number; tip_value: number }[]) {
       const cur = outletMap.get(b.outlet_id)
-      if (cur) { cur.revenue += b.total; cur.billCount++ }
+      if (cur) { cur.revenue += billRevenue(b); cur.billCount++ }
     }
     outlets = [...outletMap.entries()]
       .map(([outletId, v]) => ({ outletId, ...v }))

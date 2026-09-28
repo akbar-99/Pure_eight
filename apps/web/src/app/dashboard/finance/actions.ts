@@ -1,5 +1,6 @@
 'use server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { billRevenue, sumRevenue } from '@/lib/billing/revenue'
 import { istNow, istToday } from '@/lib/utils'
 import { getServerContext } from '@/lib/context/server'
 import { resolveScope } from '@/lib/context/scope'
@@ -59,12 +60,12 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
 
   // 'total' only: bills carries no payment_mode column, and selecting it made
   // every one of these queries fail, so revenue on this screen was always zero.
-  const billsQ = admin.from('bills').select('total').eq('status', 'closed')
+  const billsQ = admin.from('bills').select('total, tip_value').eq('status', 'closed')
     .in('outlet_id', scope.outletIds)
     .gte('created_at', bounds.start).lte('created_at', bounds.end)
     .is('deleted_at', null)
 
-  const todayBillsQ = admin.from('bills').select('id, total').eq('status', 'closed')
+  const todayBillsQ = admin.from('bills').select('id, total, tip_value').eq('status', 'closed')
     .in('outlet_id', scope.outletIds)
     .gte('created_at', todayBounds.start).lte('created_at', todayBounds.end)
     .is('deleted_at', null)
@@ -80,12 +81,12 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
     todayBillsQ,
   ])
 
-  const bills = (billsRes.data ?? []) as unknown as Array<{ total: number }>
+  const bills = (billsRes.data ?? []) as unknown as Array<{ total: number; tip_value: number }>
   const expenses = (expensesRes.data ?? []) as ExpenseRow[]
-  const todayBills = (todayBillsRes.data ?? []) as unknown as Array<{ id: string; total: number }>
+  const todayBills = (todayBillsRes.data ?? []) as unknown as Array<{ id: string; total: number; tip_value: number }>
 
   // Revenue
-  const revenue_paise = bills.reduce((s, b) => s + (b.total ?? 0), 0)
+  const revenue_paise = sumRevenue(bills)
 
   // Expenses breakdown
   const cogs_paise = expenses
@@ -115,7 +116,7 @@ export async function getFinancePageData(from: string, to: string): Promise<Fina
     : 0
 
   // Day-end summary
-  const day_revenue_paise = todayBills.reduce((s, b) => s + (b.total ?? 0), 0)
+  const day_revenue_paise = sumRevenue(todayBills)
 
   // Split from bill_payments rather than a mode on the bill. A bill may be
   // settled across several modes, so there is no single mode to read off it.

@@ -1,7 +1,7 @@
 'use client'
 
 import { X, Star } from 'lucide-react'
-import { fmtCurrency } from '@/lib/utils'
+import { fmtMoney } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 export interface ReceiptData {
@@ -21,6 +21,8 @@ export interface ReceiptData {
   discountAmount:  number  // paise
   loyaltyRedeemed: number  // points
   tip:             number  // paise
+  /** Adjustment to the nearest rupee. Often zero. */
+  roundOff:        number  // paise
   grandTotal:      number  // paise
   payments:        Array<{ mode: string; amount: number }>
   loyaltyEarned:   number  // points
@@ -86,7 +88,7 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps) {
                   <p className="text-xs text-grey leading-tight">{line.staffName}{line.qty > 1 ? ` × ${line.qty}` : ''}</p>
                 )}
               </div>
-              <span className="text-charcoal font-medium whitespace-nowrap">{fmtCurrency(line.total)}</span>
+              <span className="text-charcoal font-medium whitespace-nowrap">{fmtMoney(line.total)}</span>
             </div>
           ))}
         </div>
@@ -97,39 +99,48 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps) {
         <div className="space-y-1.5 text-sm">
           <div className="flex justify-between">
             <span className="text-grey">Subtotal</span>
-            <span className="font-medium text-charcoal">{fmtCurrency(data.subtotal)}</span>
+            <span className="font-medium text-charcoal">{fmtMoney(data.subtotal)}</span>
           </div>
 
           <div className="flex justify-between">
             <span className="text-grey">Tax</span>
-            <span className="font-medium text-charcoal">{fmtCurrency(data.taxTotal)}</span>
+            <span className="font-medium text-charcoal">{fmtMoney(data.taxTotal)}</span>
           </div>
 
           {data.discountAmount > 0 && (
             <div className="flex justify-between">
               <span className="text-grey">Discount</span>
-              <span className="font-medium text-charcoal">-{fmtCurrency(data.discountAmount)}</span>
+              <span className="font-medium text-charcoal">-{fmtMoney(data.discountAmount)}</span>
             </div>
           )}
 
           {data.loyaltyRedeemed > 0 && (
             <div className="flex justify-between">
               <span className="text-grey">Points Redeemed ({data.loyaltyRedeemed} pts)</span>
-              <span className="font-medium text-charcoal">-{fmtCurrency(data.loyaltyRedeemed * 100)}</span>
+              <span className="font-medium text-charcoal">-{fmtMoney(data.loyaltyRedeemed * 100)}</span>
             </div>
           )}
 
           {data.tip > 0 && (
             <div className="flex justify-between">
               <span className="text-grey">Tip</span>
-              <span className="font-medium text-charcoal">{fmtCurrency(data.tip)}</span>
+              <span className="font-medium text-charcoal">{fmtMoney(data.tip)}</span>
+            </div>
+          )}
+
+          {data.roundOff !== 0 && (
+            <div className="flex justify-between">
+              <span className="text-grey">Round off</span>
+              <span className="font-medium text-charcoal">
+                {data.roundOff > 0 ? '+' : '−'}{fmtMoney(Math.abs(data.roundOff))}
+              </span>
             </div>
           )}
 
           {/* Grand total */}
           <div className="flex justify-between pt-2 border-t-2 border-black">
             <span className="font-bold text-base text-black">TOTAL</span>
-            <span className="font-bold text-base text-black">{fmtCurrency(data.grandTotal)}</span>
+            <span className="font-bold text-base text-black">{fmtMoney(data.grandTotal)}</span>
           </div>
         </div>
 
@@ -140,7 +151,7 @@ export function ReceiptModal({ data, onClose }: ReceiptModalProps) {
           {data.payments.map((p, i) => (
             <span key={i}>
               {i > 0 && ' · '}
-              <span className="capitalize">{p.mode}</span>{' '}{fmtCurrency(p.amount)}
+              <span className="capitalize">{p.mode}</span>{' '}{fmtMoney(p.amount)}
             </span>
           ))}
         </p>

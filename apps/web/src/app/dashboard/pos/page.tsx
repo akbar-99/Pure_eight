@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge }           from '@/components/ui/badge'
 import { Separator }       from '@/components/ui/separator'
 import { Avatar }          from '@/components/ui/avatar'
-import { cn, fmtCurrency } from '@/lib/utils'
+import { cn, fmtCurrency, fmtMoney } from '@/lib/utils'
 import { computeBillTotals, pointsEarnedOn } from '@/lib/billing/totals'
 import { PAYMENT_MODES as ALL_PAYMENT_MODES } from '@/lib/constants'
 import { Search, Plus, X, PlusCircle } from 'lucide-react'
@@ -153,6 +153,7 @@ export default function POSPage() {
   const lineTax         = totals.taxValue
   const loyaltyDiscount = totals.loyaltyDiscount
   const grandTotal      = totals.total
+  const roundOff        = totals.roundOff
   const pointsToEarn    = pointsEarnedOn(grandTotal)
 
   // Service lines still missing the staff member who performed them. Products are
@@ -312,6 +313,7 @@ export default function POSPage() {
           discountAmount,
           loyaltyRedeemed: clampedLoyalty,
           tip,
+          roundOff,
           grandTotal,
           payments:        payments.filter(p => p.amount > 0),
           loyaltyEarned:   pointsToEarn,
@@ -622,7 +624,7 @@ export default function POSPage() {
                     {lines.map(line => (
                       <div key={line.id} className="flex justify-between text-sm">
                         <span className="text-grey truncate max-w-[55%]">{line.name}</span>
-                        <span className="font-medium text-charcoal">{fmtCurrency(computeLine(line).lineTotal)}</span>
+                        <span className="font-medium text-charcoal">{fmtMoney(computeLine(line).lineTotal)}</span>
                       </div>
                     ))}
                   </div>
@@ -631,11 +633,11 @@ export default function POSPage() {
                   <div className="border-t border-pearl pt-3 space-y-1.5">
                     <div className="flex justify-between text-sm">
                       <span className="text-grey">Subtotal</span>
-                      <span className="font-medium">{fmtCurrency(subtotal)}</span>
+                      <span className="font-medium">{fmtMoney(subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-grey">GST</span>
-                      <span className="font-medium">{fmtCurrency(lineTax)}</span>
+                      <span className="font-medium">{fmtMoney(lineTax)}</span>
                     </div>
                   </div>
 
@@ -710,11 +712,22 @@ export default function POSPage() {
                     </div>
                   </div>
 
+                  {/* Round off — shown only when the paise actually moved, so a
+                      bill that already lands on a rupee stays uncluttered. */}
+                  {roundOff !== 0 && (
+                    <div className="flex justify-between text-sm mt-3">
+                      <span className="text-grey">Round off</span>
+                      <span className="font-medium text-grey">
+                        {roundOff > 0 ? '+' : '−'}{fmtMoney(Math.abs(roundOff))}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Grand total */}
                   <Separator className="my-3" />
                   <div className="flex justify-between text-base font-bold mb-4">
                     <span className="text-black">Total</span>
-                    <span className="text-black font-mono">{fmtCurrency(grandTotal)}</span>
+                    <span className="text-black font-mono">{fmtMoney(grandTotal)}</span>
                   </div>
 
                   {/* ── Split payment ── */}

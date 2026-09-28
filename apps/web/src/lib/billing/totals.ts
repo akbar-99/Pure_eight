@@ -44,6 +44,9 @@ export type BillTotals = {
   taxValue:        number
   /** What the bills row stores: line discounts + bill discount + loyalty. */
   discountValue:   number
+  /** Adjustment to the nearest rupee, positive or negative. Often zero. */
+  roundOff:        number
+  /** What is actually charged: always a whole number of rupees. */
   total:           number
   lines:           ComputedLine[]
 }
@@ -106,15 +109,25 @@ export function computeBillTotals(lines: BillableLine[], adj: BillAdjustments): 
   const taxValue          = computed.reduce((s, c) => s + c.taxValue, 0)
   const lineDiscountTotal = computed.reduce((s, c) => s + c.discountValue, 0)
 
+  // Loyalty points are settlement rather than a reduction in the price agreed,
+  // so they come off after tax, not before it.
+  const beforeRounding = Math.max(0, subtotal - billDiscount + taxValue - loyaltyDiscount + adj.tip)
+
+  // Tax on a discounted price rarely lands on a whole rupee, and nobody at a
+  // counter hands over 55 paise. The payable is rounded to the nearest rupee
+  // and the adjustment shown, as a GST invoice does, so the bill adds up and
+  // the amount asked for is the amount that can be paid.
+  const total    = Math.round(beforeRounding / 100) * 100
+  const roundOff = total - beforeRounding
+
   return {
     subtotal,
     billDiscount,
     loyaltyDiscount,
     taxValue,
     discountValue: lineDiscountTotal + billDiscount + loyaltyDiscount,
-    // Loyalty points are settlement rather than a reduction in the price
-    // agreed, so they come off after tax, not before it.
-    total: Math.max(0, subtotal - billDiscount + taxValue - loyaltyDiscount + adj.tip),
+    roundOff,
+    total,
     lines: computed,
   }
 }

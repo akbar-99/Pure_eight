@@ -43,6 +43,22 @@ export function fmtDate(date: string | Date, fmt = "dd MMM yyyy"): string {
 }
 
 /**
+ * Money with paise shown only when there are any: "₹2,381", but "₹118.55".
+ *
+ * fmtCurrency rounds to whole rupees, which reads well on a dashboard but
+ * cannot be used on a bill: tax on a discounted price lands on paise, and a
+ * rounded line makes the document fail to add up.
+ */
+export function fmtMoney(paise: number, currency = "INR", locale = "en-IN"): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: paise % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(paise / 100);
+}
+
+/**
  * Formats a plain calendar day, 'YYYY-MM-DD', as itself.
  *
  * `new Date('2026-09-01')` is midnight **UTC**, which in any timezone behind

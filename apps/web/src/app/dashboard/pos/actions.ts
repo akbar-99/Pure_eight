@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getServerContext, requireServerContext } from '@/lib/context/server'
 import { computeBillTotals } from '@/lib/billing/totals'
+import { allocateTip } from '@/lib/billing/tips'
 
 interface LineItemInput {
   name: string
@@ -33,6 +34,8 @@ export interface CheckoutInput {
   discountAmount:       number   // pre-computed paise
   loyaltyPointsRedeemed: number  // points
   tip:                  number   // paise
+  /** Staff the tip is for; null splits it between everyone on the bill. */
+  tipTo?:               string | null
 }
 
 export interface CheckoutResult {
@@ -203,6 +206,24 @@ export async function checkoutBill(input: CheckoutInput): Promise<CheckoutResult
         created_by:     ctx.userId,
         notes:          `Sold on ${billNumber}`,
       })
+    }
+
+    // 6c. Who the tip is for.
+    //
+    // Recorded rather than worked out when a report is read: the split was
+    // being derived from whoever was on the bill, so it could never honour a
+    // tip meant for one person and it changed whenever the bill was edited.
+    if (input.tip > 0) {
+      const shares = allocateTip(
+        input.tip,
+        input.lines.map(l => l.staffId).filter(Boolean) as string[],
+        input.tipTo ?? null,
+      )
+      if (shares.length > 0) {
+        await supabase.from('bill_tips').insert(
+          shares.map(s => ({ bill_id: bill.id, staff_id: s.staffId, amount: s.amount }))
+        )
+      }
     }
 
     // 7. Loyalty points — redeem first, then earn

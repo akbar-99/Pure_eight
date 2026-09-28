@@ -10,6 +10,7 @@ import { Separator }       from '@/components/ui/separator'
 import { Avatar }          from '@/components/ui/avatar'
 import { cn, fmtCurrency, fmtMoney } from '@/lib/utils'
 import { computeBillTotals, pointsEarnedOn } from '@/lib/billing/totals'
+import { allocateTip } from '@/lib/billing/tips'
 import { PAYMENT_MODES as ALL_PAYMENT_MODES } from '@/lib/constants'
 import { Search, Plus, X, PlusCircle } from 'lucide-react'
 import { checkoutBill, getServices, getStaff, getProducts, searchCustomers } from './actions'
@@ -90,6 +91,8 @@ export default function POSPage() {
   const [lines,         setLines]         = useState<LineItem[]>([])
   const [notes,         setNotes]         = useState('')
   const [tip,           setTip]           = useState(0)       // paise
+  // null means split between everyone on the bill.
+  const [tipTo,         setTipTo]         = useState<string | null>(null)
   const [isPending,     startTransition]  = useTransition()
 
   // Bill-level discount
@@ -159,6 +162,12 @@ export default function POSPage() {
   // Service lines still missing the staff member who performed them. Products are
   // exempt: they are goods sold, not work done by anyone.
   const unassigned = lines.filter(l => l.kind === 'service' && !l.staffId)
+
+  // Everyone credited with work on this bill, in the order they appear on it.
+  const tipCrew = [...new Map(
+    lines.filter(l => l.staffId).map(l => [l.staffId, { id: l.staffId, name: l.staffName }])
+  ).values()]
+  const tipShares = allocateTip(tip, tipCrew.map(c => c.id), tipTo)
 
   // Only rows carrying money need a mode: an empty row is dropped at checkout
   // and blocking on it would strand the cashier on a row they never filled in.
@@ -290,6 +299,7 @@ export default function POSPage() {
         discountAmount,
         loyaltyPointsRedeemed: clampedLoyalty,
         tip,
+        tipTo,
       })
 
       if (result.success) {
@@ -330,7 +340,7 @@ export default function POSPage() {
     setReceiptData(null)
     setLines([]); setCustomer(null); setCustSearch('')
     setDiscountType('none'); setDiscountInput(0)
-    setLoyaltyRedeem(0); setNotes(''); setTip(0)
+    setLoyaltyRedeem(0); setNotes(''); setTip(0); setTipTo(null)
     setPayments([{ id: '1', mode: '', amount: 0 }])
   }
 
@@ -700,16 +710,56 @@ export default function POSPage() {
                   )}
 
                   {/* Tip */}
-                  <div className="border-t border-pearl mt-3 pt-3 flex items-center justify-between">
-                    <p className="text-xs font-medium text-charcoal">Tip</p>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-grey">₹</span>
-                      <input
-                        type="number" min={0} placeholder="0" step={10}
-                        className="w-20 px-2 py-1 text-sm border border-silver rounded-[4px] text-right outline-none focus:border-charcoal"
-                        onChange={e => setTip(Math.round((parseFloat(e.target.value) || 0) * 100))}
-                      />
+                  <div className="border-t border-pearl mt-3 pt-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-charcoal">Tip</p>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-grey">₹</span>
+                        <input
+                          type="number" min={0} placeholder="0" step={10}
+                          className="w-20 px-2 py-1 text-sm border border-silver rounded-[4px] text-right outline-none focus:border-charcoal"
+                          onChange={e => setTip(Math.round((parseFloat(e.target.value) || 0) * 100))}
+                        />
+                      </div>
                     </div>
+
+                    {/* Who the tip is for. Only asked when there is a tip and more
+                        than one person worked on the bill — with one, it is theirs. */}
+                    {tip > 0 && tipCrew.length > 1 && (
+                      <div className="mt-2">
+                        <p className="text-[11px] text-grey mb-1.5">Tip goes to</p>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            onClick={() => setTipTo(null)}
+                            aria-pressed={tipTo === null}
+                            className={cn('h-7 px-2.5 text-xs rounded-[4px] border transition-colors',
+                              tipTo === null
+                                ? 'bg-black text-white border-black font-medium'
+                                : 'bg-white text-steel border-silver hover:border-charcoal')}
+                          >
+                            Split equally
+                          </button>
+                          {tipCrew.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => setTipTo(c.id)}
+                              aria-pressed={tipTo === c.id}
+                              className={cn('h-7 px-2.5 text-xs rounded-[4px] border transition-colors',
+                                tipTo === c.id
+                                  ? 'bg-black text-white border-black font-medium'
+                                  : 'bg-white text-steel border-silver hover:border-charcoal')}
+                            >
+                              {c.name}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-grey mt-1.5">
+                          {tipShares.map(sh =>
+                            `${tipCrew.find(c => c.id === sh.staffId)?.name ?? '—'} ${fmtMoney(sh.amount)}`
+                          ).join(' · ')}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Round off — shown only when the paise actually moved, so a

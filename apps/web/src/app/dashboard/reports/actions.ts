@@ -3,6 +3,7 @@
 import { createAdminClient }  from '@/lib/supabase/admin'
 import { getServerContext }   from '@/lib/context/server'
 import { resolveScope }       from '@/lib/context/scope'
+import { allocateTip }        from '@/lib/billing/tips'
 export type { DateRange } from '@/app/dashboard/overview/actions'
 import {
   parseScheme, commissionEarned, describeScheme, NO_COMMISSION, type CommissionScheme,
@@ -139,20 +140,34 @@ export async function fetchReportData(range: DateRange): Promise<ReportData> {
   const staffTipsRes = await outletFilter(
     admin
       .from('bills')
-      .select('tip_value, bill_lines(staff_id)')
+      .select('id, tip_value, bill_lines(staff_id)')
       .eq('status', 'closed')
       .gte('created_at', start).lte('created_at', end)
       .is('deleted_at', null)
       .gt('tip_value', 0)
   )
-  // We'll distribute tips evenly among staff on the bill
+  // Tips as they were actually assigned at the counter. Bills raised before
+  // that was recorded have no rows, so those fall back to the even split they
+  // have always been reported with.
+  const tipBills = (staffTipsRes.data ?? []) as
+    { id: string; tip_value: number; bill_lines: { staff_id: string | null }[] }[]
+
+  const { data: tipRows } = tipBills.length > 0
+    ? await admin.from('bill_tips').select('bill_id, staff_id, amount')
+        .in('bill_id', tipBills.map(b => b.id))
+    : { data: [] }
+
+  const recorded = new Set(((tipRows ?? []) as { bill_id: string }[]).map(r => r.bill_id))
   const staffTipsMap = new Map<string, number>()
-  for (const b of (staffTipsRes.data ?? []) as { tip_value: number; bill_lines: { staff_id: string | null }[] }[]) {
-    const staffIds = [...new Set(b.bill_lines.map(l => l.staff_id).filter(Boolean))] as string[]
-    if (staffIds.length === 0) continue
-    const share = Math.round(b.tip_value / staffIds.length)
-    for (const sid of staffIds) {
-      staffTipsMap.set(sid, (staffTipsMap.get(sid) ?? 0) + share)
+
+  for (const r of (tipRows ?? []) as { staff_id: string; amount: number }[]) {
+    staffTipsMap.set(r.staff_id, (staffTipsMap.get(r.staff_id) ?? 0) + r.amount)
+  }
+  for (const b of tipBills) {
+    if (recorded.has(b.id)) continue
+    const crew = [...new Set(b.bill_lines.map(l => l.staff_id).filter(Boolean))] as string[]
+    for (const s of allocateTip(b.tip_value, crew, null)) {
+      staffTipsMap.set(s.staffId, (staffTipsMap.get(s.staffId) ?? 0) + s.amount)
     }
   }
 

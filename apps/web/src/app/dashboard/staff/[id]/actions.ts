@@ -6,6 +6,7 @@ import {
   parseScheme, commissionEarned, describeScheme, NO_COMMISSION,
 } from '@/lib/billing/commission'
 import { salaryForRange, salaryCoverageLabel } from '@/lib/billing/salary'
+import { allocateTip } from '@/lib/billing/tips'
 import type { DateRange } from '@/app/dashboard/overview/actions'
 
 /**
@@ -179,15 +180,23 @@ export async function getStaffDetail(
   let tips = 0
   const tipped = [...billMap.values()].map(b => b.id)
   if (tipped.length > 0) {
-    const { data: tipRows } = await admin
-      .from('bills')
-      .select('id, tip_value, bill_lines(staff_id)')
-      .in('id', tipped)
-      .gt('tip_value', 0)
+    const [assignedRes, billsRes] = await Promise.all([
+      admin.from('bill_tips').select('bill_id, staff_id, amount').in('bill_id', tipped),
+      admin.from('bills').select('id, tip_value, bill_lines(staff_id)').in('id', tipped).gt('tip_value', 0),
+    ])
 
-    for (const b of (tipRows ?? []) as { tip_value: number; bill_lines: { staff_id: string | null }[] }[]) {
-      const crew = [...new Set(b.bill_lines.map(l => l.staff_id).filter(Boolean))]
-      if (crew.length > 0) tips += Math.round(b.tip_value / crew.length)
+    const assigned = (assignedRes.data ?? []) as { bill_id: string; staff_id: string; amount: number }[]
+    const recorded = new Set(assigned.map(r => r.bill_id))
+
+    tips = assigned.filter(r => r.staff_id === staffId).reduce((t, r) => t + r.amount, 0)
+
+    // Bills from before the share was recorded keep the even split they have
+    // always been reported with.
+    for (const b of (billsRes.data ?? []) as
+      { id: string; tip_value: number; bill_lines: { staff_id: string | null }[] }[]) {
+      if (recorded.has(b.id)) continue
+      const crew = [...new Set(b.bill_lines.map(l => l.staff_id).filter(Boolean))] as string[]
+      tips += allocateTip(b.tip_value, crew, null).find(s => s.staffId === staffId)?.amount ?? 0
     }
   }
 
